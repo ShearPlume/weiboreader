@@ -137,6 +137,18 @@ async function remoteMd5(opts, key) {
   }
 }
 
+/** 简单并发池：控制 HEAD/PUT 并发，避免几百个对象串行等待。 */
+async function pool(items, concurrency, worker) {
+  const queue = items.slice();
+  const runners = Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
+    while (queue.length) {
+      const item = queue.shift();
+      await worker(item);
+    }
+  });
+  await Promise.all(runners);
+}
+
 /**
  * 上传一个对象；内容未变化则跳过。
  * @returns {Promise<'uploaded'|'skipped'|'would-upload'>}
@@ -281,13 +293,13 @@ async function main() {
   if (opts.mode !== 'static' && !opts.skipAvatars) {
     let uploaded = 0;
     let skipped = 0;
-    for (const avatar of avatars) {
+    await pool(avatars, 8, async (avatar) => {
       const key = `${opts.prefix}avatar/${avatar.file}`;
       const body = fs.readFileSync(path.join(dataDir, 'avatars', avatar.file));
       const result = await upload(key, body, MIME[avatar.ext] || 'application/octet-stream', 'public, max-age=604800');
       if (result === 'uploaded') uploaded += 1;
       else if (result === 'skipped') skipped += 1;
-    }
+    });
     console.log(`头像：上传 ${uploaded} / 跳过 ${skipped}`);
   }
 
@@ -301,24 +313,24 @@ async function main() {
       const avatar = avatarByUid.get(String(uid));
       exportedProfiles[uid] = { ...profile, avatarFile: avatar ? avatar.file : '' };
     }
-    await upload(
-      `${opts.prefix}users.json`,
-      Buffer.from(JSON.stringify({ items: exportedUsers }), 'utf8'),
-      MIME['.json'],
-      'no-cache'
-    );
-    await upload(
-      `${opts.prefix}profiles.json`,
-      Buffer.from(JSON.stringify({ items: exportedProfiles }), 'utf8'),
-      MIME['.json'],
-      'no-cache'
-    );
+    const dataJobs = [
+      {
+        key: `${opts.prefix}users.json`,
+        body: Buffer.from(JSON.stringify({ items: exportedUsers }), 'utf8'),
+      },
+      {
+        key: `${opts.prefix}profiles.json`,
+        body: Buffer.from(JSON.stringify({ items: exportedProfiles }), 'utf8'),
+      },
+    ];
 
     let recordFiles = 0;
     for (const user of targets) {
       const uid = String(user.uid);
       const modes = readOwnerRecords(dataDir, uid);
-      for (const [mode, list] of modes) {
+      // 全部 6 种模式都导出（没有数据的写空快照），避免页面回落 API 时遇到 404
+      for (const mode of MODE_KEYS) {
+        const list = modes.get(mode) || [];
         const payload = {
           uid,
           mode,
@@ -326,15 +338,17 @@ async function main() {
           unread: list.filter((item) => item.isUnread).length,
           items: list,
         };
-        await upload(
-          `${opts.prefix}records/${uid}/${mode}.json`,
-          Buffer.from(JSON.stringify(payload), 'utf8'),
-          MIME['.json'],
-          'no-cache'
-        );
+        dataJobs.push({
+          key: `${opts.prefix}records/${uid}/${mode}.json`,
+          body: Buffer.from(JSON.stringify(payload), 'utf8'),
+        });
         recordFiles += 1;
       }
     }
+
+    await pool(dataJobs, 6, async (job) => {
+      await upload(job.key, job.body, MIME['.json'], 'no-cache');
+    });
     console.log(`数据快照：${recordFiles} 个记录文件；上传 ${stats.uploaded} / 跳过 ${stats.skipped}`);
   }
 
