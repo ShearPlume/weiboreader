@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Weibo Reader · 微博互动归档与离线阅读</title>
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div id="banner" class="banner hidden" role="status" aria-live="polite"></div>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">W</span>
+    <span class="brand-name">Weibo Reader</span>
+    <span class="brand-ver" id="brandVer">v1.0</span>
+  </div>
+  <div class="topbar-right">
+    <div class="balance-chip" id="balanceChip" title="剩余 credits（本地查看与导出不消耗 credits）">
+      <span class="balance-label">剩余</span>
+      <span class="balance-value" id="balanceValue">—</span>
+      <span class="balance-unit">credits</span>
+      <button class="icon-btn" id="btnRefreshBalance" type="button" title="刷新余额">⟳</button>
+      <span class="balance-at" id="balanceAt"></span>
+    </div>
+    <span class="account-chip" id="accountChip">未登录</span>
+    <a class="btn btn-ghost btn-sm" id="btnRecharge" href="https://open.weibo.com/cli"
+       target="_blank" rel="noopener" title="打开微博开放平台 CLI 控制台充值">充值</a>
+    <button class="btn btn-primary btn-sm" id="btnLogin" type="button">登录微博</button>
+  </div>
+</header>
+
+<div class="layout">
+  <nav class="sidebar" aria-label="主导航">
+    <a class="nav-item" href="#/overview" data-nav="overview"><i class="nav-ico">◎</i><span>总览</span></a>
+    <a class="nav-item" href="#/users" data-nav="users"><i class="nav-ico">☰</i><span>用户库</span></a>
+    <a class="nav-item" href="#/posts" data-nav="posts"><i class="nav-ico">▤</i><span>博文库</span></a>
+    <a class="nav-item" href="#/fetch" data-nav="fetch"><i class="nav-ico">⇣</i><span>取数</span></a>
+    <a class="nav-item" href="#/search" data-nav="search"><i class="nav-ico">⌕</i><span>搜索</span></a>
+    <a class="nav-item" href="#/settings" data-nav="settings"><i class="nav-ico">⚙</i><span>设置</span></a>
+    <div class="sidebar-foot">
+      <div class="tiny" id="dataDirHint">数据目录加载中…</div>
+    </div>
+  </nav>
+  <main class="view" id="view" tabindex="-1"></main>
+</div>
+
+<div class="toast-wrap" id="toastWrap" aria-live="polite"></div>
+<div id="modalRoot"></div>
+
+<script type="module" src="/js/app.js"></script>
+</body>
+</html>

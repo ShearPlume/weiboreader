@@ -1,0 +1,14 @@
+{
+  "name": "weibo-reader-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "微博互动数据本机归档与离线阅读工具（Windows Web 版，零第三方依赖、零构建）",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server/server.js",
+    "test": "node --test"
+  }
+}

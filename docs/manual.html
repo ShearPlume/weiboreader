@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Weibo Reader 使用手册</title>
+<style>
+  /* ---------------------------------------------------------------
+     版式：黑白黄专业报告风格（安永华明报告式排版）
+     严格 A4 三页，页边距 0，由 .page 内部控制留白
+     --------------------------------------------------------------- */
+  @page { size: A4; margin: 0; }
+
+  :root {
+    --ink: #1A1A1A;
+    --ink-soft: #3C3C44;
+    --gray: #6E6E78;
+    --line: #D6D6DC;
+    --yellow: #FFE600;
+    --paper: #FFFFFF;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Microsoft YaHei", "MSYH", "PingFang SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    position: relative;
+    width: 210mm;
+    height: 297mm;
+    padding: 20mm 18mm 16mm 18mm;
+    background: var(--paper);
+    overflow: hidden;
+    page-break-after: always;
+    display: flex;
+    flex-direction: column;
+  }
+  .page:last-child { page-break-after: auto; }
+
+  /* 顶部黑条 */
+  .topbar {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 5mm;
+    background: var(--ink);
+  }
+  .topbar::after {
+    content: "";
+    position: absolute;
+    right: 0; top: 0;
+    width: 42mm; height: 5mm;
+    background: var(--yellow);
+  }
+
+  /* 页眉 */
+  .masthead {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding-bottom: 2.5mm;
+    border-bottom: 0.4pt solid var(--line);
+  }
+  .masthead .brand {
+    font-size: 8pt;
+    letter-spacing: 0.22em;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .masthead .meta {
+    font-size: 7.5pt;
+    color: var(--gray);
+    letter-spacing: 0.06em;
+  }
+
+  /* 章节号 + 标题 */
+  .chapter {
+    display: flex;
+    align-items: flex-start;
+    gap: 6mm;
+    margin-top: 14mm;
+  }
+  .chapter-num {
+    flex: 0 0 auto;
+    width: 15mm;
+    height: 15mm;
+    background: var(--yellow);
+    color: var(--ink);
+    font-size: 17pt;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    letter-spacing: -0.02em;
+  }
+  .chapter-text { padding-top: 0.6mm; }
+  .chapter-text h1 {
+    font-size: 21pt;
+    font-weight: 700;
+    letter-spacing: -0.005em;
+    line-height: 1.25;
+  }
+  .chapter-text .lead {
+    margin-top: 2.6mm;
+    font-size: 9.5pt;
+    color: var(--gray);
+    line-height: 1.65;
+  }
+
+  /* 封面主标题 */
+  .cover-title {
+    margin-top: 26mm;
+  }
+  .cover-title .kicker {
+    display: inline-block;
+    background: var(--yellow);
+    color: var(--ink);
+    font-size: 8pt;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    padding: 1.4mm 3mm;
+  }
+  .cover-title h1 {
+    margin-top: 7mm;
+    font-size: 46pt;
+    font-weight: 700;
+    line-height: 1.06;
+    letter-spacing: -0.02em;
+  }
+  .cover-title .sub {
+    margin-top: 6mm;
+    font-size: 13pt;
+    color: var(--ink-soft);
+    line-height: 1.6;
+    font-weight: 400;
+  }
+  .cover-rule {
+    width: 100%;
+    height: 1.6pt;
+    background: var(--ink);
+    margin-top: 8mm;
+  }
+  .cover-note {
+    margin-top: 7mm;
+    font-size: 10.5pt;
+    line-height: 1.9;
+    color: var(--ink-soft);
+    max-width: 150mm;
+  }
+  .cover-note b { font-weight: 700; }
+
+  /* 三步 */
+  .steps {
+    margin-top: 12mm;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  .step {
+    display: flex;
+    align-items: flex-start;
+    gap: 5mm;
+    padding: 5.2mm 0;
+    border-top: 0.4pt solid var(--line);
+  }
+  .step:last-child { border-bottom: 0.4pt solid var(--line); }
+  .step-no {
+    flex: 0 0 auto;
+    width: 11mm;
+    font-size: 15pt;
+    font-weight: 700;
+    color: var(--ink);
+    line-height: 1.2;
+  }
+  .step-body h3 {
+    font-size: 11.5pt;
+    font-weight: 700;
+    line-height: 1.4;
+  }
+  .step-body p {
+    margin-top: 1.6mm;
+    font-size: 9.5pt;
+    color: var(--gray);
+    line-height: 1.72;
+  }
+  .step-body code {
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 9pt;
+    background: #F4F4F6;
+    border: 0.4pt solid var(--line);
+    padding: 0.3mm 1.4mm;
+  }
+
+  /* 提示块 */
+  .callout {
+    margin-top: 9mm;
+    background: #FAFAFB;
+    border-left: 2.6pt solid var(--yellow);
+    padding: 4.4mm 5mm;
+  }
+  .callout .tag {
+    font-size: 7.5pt;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    color: var(--gray);
+  }
+  .callout p {
+    margin-top: 1.8mm;
+    font-size: 9.5pt;
+    line-height: 1.78;
+    color: var(--ink-soft);
+  }
+
+  /* 两列列表 */
+  .grid2 {
+    margin-top: 8mm;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 10mm;
+    row-gap: 0;
+  }
+  .gitem {
+    padding: 3.4mm 0;
+    border-top: 0.4pt solid var(--line);
+  }
+  .gitem .gn {
+    font-size: 7.5pt;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    color: var(--gray);
+  }
+  .gitem h4 {
+    margin-top: 1.4mm;
+    font-size: 11pt;
+    font-weight: 700;
+    line-height: 1.4;
+  }
+  .gitem p {
+    margin-top: 1.6mm;
+    font-size: 9pt;
+    color: var(--gray);
+    line-height: 1.7;
+  }
+
+  /* 界面导览条 */
+  .navstrip {
+    margin-top: 7mm;
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    border-top: 1.2pt solid var(--ink);
+    border-bottom: 1.2pt solid var(--ink);
+  }
+  .navstrip div {
+    padding: 3.4mm 1mm;
+    text-align: center;
+    font-size: 9.5pt;
+    font-weight: 700;
+    border-right: 0.4pt solid var(--line);
+  }
+  .navstrip div:last-child { border-right: none; }
+  .navstrip div.hl { background: var(--yellow); }
+
+  /* 问答 */
+  .faq { margin-top: 4mm; }
+  .qa {
+    padding: 2.9mm 0;
+    border-top: 0.4pt solid var(--line);
+  }
+  .qa:last-child { border-bottom: 0.4pt solid var(--line); }
+  .qa .q {
+    font-size: 10pt;
+    font-weight: 700;
+    line-height: 1.5;
+  }
+  .qa .q::before {
+    content: "Q";
+    display: inline-block;
+    width: 5.2mm;
+    height: 5.2mm;
+    line-height: 5.2mm;
+    text-align: center;
+    background: var(--ink);
+    color: #fff;
+    font-size: 7pt;
+    font-weight: 700;
+    margin-right: 2.2mm;
+    vertical-align: 0.4mm;
+  }
+  .qa .a {
+    margin-top: 1.5mm;
+    padding-left: 7.4mm;
+    font-size: 9pt;
+    color: var(--gray);
+    line-height: 1.78;
+  }
+
+  /* 步骤小列表 */
+  .mini {
+    margin-top: 5mm;
+    border-top: 0.4pt solid var(--line);
+  }
+  .mini .mrow {
+    display: flex;
+    gap: 4mm;
+    padding: 3.4mm 0;
+    border-bottom: 0.4pt solid var(--line);
+  }
+  .mini .mno {
+    flex: 0 0 auto;
+    width: 5.4mm;
+    height: 5.4mm;
+    background: var(--yellow);
+    font-size: 7.5pt;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .mini .mtext {
+    font-size: 9.5pt;
+    line-height: 1.7;
+    color: var(--ink-soft);
+  }
+  .mini .mtext b { color: var(--ink); font-weight: 700; }
+
+  /* 页脚 */
+  .footer {
+    margin-top: auto;
+    padding-top: 3mm;
+    border-top: 0.4pt solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 7.5pt;
+    color: var(--gray);
+    letter-spacing: 0.04em;
+  }
+  .footer .pageno {
+    font-weight: 700;
+    color: var(--ink);
+    font-size: 8pt;
+  }
+
+  .spacer { flex: 1; }
+
+  /* 取数三设置表 */
+  .setting-table {
+    margin-top: 4.5mm;
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .setting-table thead th {
+    text-align: left;
+    font-size: 7.5pt;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    color: var(--gray);
+    padding: 0 0 2.2mm 0;
+    border-bottom: 1.2pt solid var(--ink);
+  }
+  .setting-table tbody td {
+    padding: 2.4mm 0;
+    border-bottom: 0.4pt solid var(--line);
+    vertical-align: top;
+    font-size: 9pt;
+    line-height: 1.65;
+  }
+  .setting-table tbody td:first-child {
+    width: 30mm;
+    font-weight: 700;
+    font-size: 9.5pt;
+    color: var(--ink);
+  }
+  .setting-table tbody td:last-child {
+    width: 46mm;
+    color: var(--gray);
+    font-size: 8.5pt;
+    padding-left: 4mm;
+  }
+  .subsec-title {
+    margin-top: 7mm;
+    font-size: 11.5pt;
+    font-weight: 700;
+    letter-spacing: -0.005em;
+  }
+  .subsec-title .q-mark {
+    display: inline-block;
+    width: 4.6mm; height: 4.6mm;
+    background: var(--yellow);
+    vertical-align: 0;
+    margin-right: 2.4mm;
+  }
+</style>
+</head>
+<body>
+
+<!-- ============================ 第 1 页 ============================ -->
+<section class="page">
+  <div class="topbar"></div>
+
+  <div class="masthead">
+    <div class="brand">WEIBO READER</div>
+    <div class="meta">使用手册 · 2026 年 11 月</div>
+  </div>
+
+  <div class="cover-title">
+    <span class="kicker">三页读完</span>
+    <h1>使用手册</h1>
+    <div class="sub">把微博评论存到自己电脑里<br>随时翻看 · 随手搜索 · 一键成报告</div>
+  </div>
+
+  <div class="cover-rule"></div>
+
+  <p class="cover-note">
+    这是一个跑在你<strong>自己电脑上</strong>的小工具。它能把某个微博用户的评论、@记录、微博正文
+    保存到本机，之后完全离线也能查看和搜索。<br>
+    保存一次，之后翻看多少次都<b>不再花钱</b>。
+  </p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-no">01</div>
+      <div class="step-body">
+        <h3>双击 <code>start.bat</code></h3>
+        <p>在文件夹里找到这个文件，双击它。会弹出一个黑色窗口，别关它——关掉程序就停了。</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-no">02</div>
+      <div class="step-body">
+        <h3>浏览器自动打开</h3>
+        <p>大约两秒后，浏览器会自己弹出页面。如果没弹出，手动打开浏览器输入
+          <code>127.0.0.1:7788</code> 即可。</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-no">03</div>
+      <div class="step-body">
+        <h3>先随便点点看</h3>
+        <p>第一次打开是<b>演示模式</b>，里面已经放了三个示例用户和一百多条评论。
+          你可以随意点击、搜索、生成报告，<b>不会花一分钱</b>，也不会碰到真实账号。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout">
+    <div class="tag">说明</div>
+    <p>看到页面顶部有一条黄色提示「当前是内置示例数据」，说明你在演示模式。
+      熟悉之后，按第 3 页的方法登录自己的微博，就能取真实数据了。</p>
+  </div>
+
+  <div class="footer">
+    <span>Weibo Reader 使用手册</span>
+    <span class="pageno">01 / 03</span>
+  </div>
+</section>
+
+<!-- ============================ 第 2 页 ============================ -->
+<section class="page">
+  <div class="topbar"></div>
+
+  <div class="masthead">
+    <div class="brand">WEIBO READER</div>
+    <div class="meta">使用手册 · 界面与操作</div>
+  </div>
+
+  <div class="chapter">
+    <div class="chapter-num">02</div>
+    <div class="chapter-text">
+      <h1>界面在哪，怎么用</h1>
+      <div class="lead">左边一列是全部入口，共六个。常用的其实只有前五个。</div>
+    </div>
+  </div>
+
+  <div class="navstrip">
+    <div class="hl">总览</div>
+    <div>用户库</div>
+    <div>博文库</div>
+    <div>取数</div>
+    <div>搜索</div>
+    <div>设置</div>
+  </div>
+
+  <div class="grid2">
+    <div class="gitem">
+      <div class="gn">01</div>
+      <h4>添加一位微博用户</h4>
+      <p>进「用户库」，把微博主页地址粘进去，点添加。也可以直接填一串数字 UID。</p>
+    </div>
+    <div class="gitem">
+      <div class="gn">02</div>
+      <h4>把评论存下来</h4>
+      <p>进「取数」，选要存哪一类（发出的、收到的、@我的），设个条数上限，点开始。</p>
+    </div>
+    <div class="gitem">
+      <div class="gn">03</div>
+      <h4>找某句话</h4>
+      <p>进「搜索」，输入关键词。还能按作者、按日期缩小范围。这一步永远免费。</p>
+    </div>
+    <div class="gitem">
+      <div class="gn">04</div>
+      <h4>做成一份报告</h4>
+      <p>在用户页点「生成报告」，会得到一个网页文件，能直接发给别人，对方双击就能看。</p>
+    </div>
+    <div class="gitem">
+      <div class="gn">05</div>
+      <h4>让它定时盯着</h4>
+      <p>在用户页点「创建订阅」，设个间隔，有新评论它会自己存下来。</p>
+    </div>
+    <div class="gitem">
+      <div class="gn">06</div>
+      <h4>换存储位置</h4>
+      <p>默认存在程序文件夹里。想换到别处，去「设置」改数据目录。</p>
+    </div>
+  </div>
+
+  <div class="subsec-title"><span class="q-mark"></span>点「开始」之前，只需看懂三件事</div>
+
+  <table class="setting-table">
+    <thead>
+      <tr>
+        <th>页面上</th>
+        <th>它问的是什么</th>
+        <th>怎么选</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>条数上限</td>
+        <td>这次最多存多少条。到了就停，不会无限往下拉。</td>
+        <td>先填 100 试试水，觉得够用再加。</td>
+      </tr>
+      <tr>
+        <td>日期范围</td>
+        <td>只想存某一段时间的话，在这里填。两端都可以只填一边。</td>
+        <td>不确定就留空，表示不限制时间。</td>
+      </tr>
+      <tr>
+        <td>增量 / 历史</td>
+        <td>「增量」是接着上次继续往新的方向存；「历史」是往更早以前翻。</td>
+        <td>日常更新选增量；补以前的内容选历史。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <div class="tag">关于花钱这件事</div>
+    <p>只有「取数」这一步会产生费用，按实际拉到的条数计。开始之前，页面上会先告诉你
+      大概要花多少、你还有多少余额；余额不够时按钮会变灰点不动。
+      <b>已存过的内容再次查看、搜索、出报告，全部免费。</b></p>
+  </div>
+
+  <div class="footer">
+    <span>Weibo Reader 使用手册</span>
+    <span class="pageno">02 / 03</span>
+  </div>
+</section>
+
+<!-- ============================ 第 3 页 ============================ -->
+<section class="page">
+  <div class="topbar"></div>
+
+  <div class="masthead">
+    <div class="brand">WEIBO READER</div>
+    <div class="meta">使用手册 · 登录与答疑</div>
+  </div>
+
+  <div class="chapter">
+    <div class="chapter-num">03</div>
+    <div class="chapter-text">
+      <h1>登录自己的微博</h1>
+      <div class="lead">只有想取真实数据时才需要登录。只想看看演示数据，可以跳过这一页的上半部分。</div>
+    </div>
+  </div>
+
+  <div class="mini">
+    <div class="mrow">
+      <div class="mno">1</div>
+      <div class="mtext">点右上角的 <b>「登录微博」</b> 按钮，会弹出一个窗口。</div>
+    </div>
+    <div class="mrow">
+      <div class="mno">2</div>
+      <div class="mtext">窗口里有一串校验码（比如 <b>41AB-ADF8</b>）和一个链接。点那个链接，会打开微博页面。</div>
+    </div>
+    <div class="mrow">
+      <div class="mno">3</div>
+      <div class="mtext">在微博页面确认授权，然后回到刚才的窗口——它会自动变成「已登录」，并显示你的余额。</div>
+    </div>
+  </div>
+
+  <div class="chapter" style="margin-top: 9mm;">
+    <div class="chapter-text">
+      <h1 style="font-size: 14pt;">常被问到的几个问题</h1>
+    </div>
+  </div>
+
+  <div class="faq">
+    <div class="qa">
+      <div class="q">双击后窗口闪一下就没了，页面也打不开</div>
+      <div class="a">多半是电脑上还没装 Node.js。去 <b>nodejs.org</b> 下载安装（选 LTS 版本），
+        装完重启电脑，再双击一次就好。</div>
+    </div>
+    <div class="qa">
+      <div class="q">提示「已经在运行」，但浏览器没反应</div>
+      <div class="a">说明程序其实开着。直接在浏览器地址栏输入 <b>127.0.0.1:7788</b> 就能进去。
+        不用重复双击。</div>
+    </div>
+    <div class="qa">
+      <div class="q">「开始」按钮是灰的，点不动</div>
+      <div class="a">两种情况：一是还在演示模式（顶部有黄色提示），需要先登录；
+        二是余额不够付这次取数。页面上都会写清是哪种原因。</div>
+    </div>
+    <div class="qa">
+      <div class="q">添加用户时提示识别不了昵称</div>
+      <div class="a">这个工具不会联网去猜名字。请改用带数字的那串地址，
+        形如 <b>weibo.com/u/1234567890</b>。</div>
+    </div>
+    <div class="qa">
+      <div class="q">关掉窗口后，订阅还会继续检查吗</div>
+      <div class="a">不会。定时检查跟着程序走，窗口关了就停。想让它一直盯着，就别关那个黑窗口。</div>
+    </div>
+    <div class="qa">
+      <div class="q">我的数据存在哪，会被上传吗</div>
+      <div class="a">全部存在你自己电脑的文件夹里，不上传任何地方。生成的报告也是本地网页文件。</div>
+    </div>
+  </div>
+
+  <div class="callout" style="margin-top: 7mm;">
+    <div class="tag">小贴士</div>
+    <p>想长期保存，把程序文件夹里的 <b>data</b> 目录整体复制一份放到别处，就是完整备份。
+      换电脑时，把这整个文件夹拷过去就能接着用，不需要重新取数。<br>
+      另外，这个工具只负责「存下来看」，<b>不会替你去发评论、点赞或删除任何内容</b>。</p>
+  </div>
+
+  <div class="footer">
+    <span>Weibo Reader 使用手册 · 版式参考黑白黄专业报告风格</span>
+    <span class="pageno">03 / 03</span>
+  </div>
+</section>
+
+</body>
+</html>

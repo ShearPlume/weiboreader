@@ -1,0 +1,17 @@
+# 运行时数据：账号凭据、token、归档、日志、报告 —— 绝不提交
+data/
+
+# 依赖与构建产物
+node_modules/
+dist/
+.output/
+
+# IDE / 系统文件
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# 日志
+*.log
+npm-debug.log*
