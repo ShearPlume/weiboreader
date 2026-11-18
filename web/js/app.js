@@ -24,6 +24,7 @@ import * as library from './views-library.js';
 import * as fetchView from './views-fetch.js';
 import * as searchView from './views-search.js';
 import * as configView from './views-config.js';
+import * as showcaseView from './views-showcase.js';
 
 /** 视图注册表：`re` 捕获组会作为 `ctx.params` 传给视图。 */
 const ROUTES = [
@@ -34,6 +35,7 @@ const ROUTES = [
   { re: /^\/posts\/(\d{1,20})$/, nav: 'posts', render: library.renderPostDetail },
   { re: /^\/fetch$/, nav: 'fetch', render: fetchView.renderFetch },
   { re: /^\/search$/, nav: 'search', render: searchView.renderSearch },
+  { re: /^\/showcase$/, nav: 'showcase', render: showcaseView.renderShowcase },
   { re: /^\/subscriptions$/, nav: 'settings', render: configView.renderSubscriptions },
   { re: /^\/settings$/, nav: 'settings', render: configView.renderSettings },
 ];

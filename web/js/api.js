@@ -45,7 +45,27 @@ export const ERR_TEXT = {
 };
 
 /**
+ * 当前页面的部署基路径（以 `/` 结尾）：
+ * 本地是 `/`，部署到 `/fakeadmin/` 时自动变成 `/fakeadmin/`。
+ * 仅用于把 `/api/*`、`/reports/*` 这类站内绝对路径挂到子路径下。
+ */
+const API_BASE = (() => {
+  const { pathname } = window.location;
+  if (pathname.endsWith('/')) return pathname;
+  if (/\.[a-z0-9]+$/i.test(pathname)) return pathname.replace(/[^/]*$/, '');
+  return `${pathname}/`;
+})();
+
+/** 站内绝对路径挂到部署基路径（`/reports/x.html` → `/fakeadmin/reports/x.html`）。 */
+export function assetUrl(pathname) {
+  const value = String(pathname || '');
+  if (!value.startsWith('/') || API_BASE === '/') return value;
+  return API_BASE.replace(/\/$/, '') + value;
+}
+
+/**
  * 调用本地 API（统一 `{ok,data}` 包裹）。
+ * 传入 `/api/...` 时会自动加部署前缀；展示页传入的完整路径不受影响。
  * @param {string} pathname
  * @param {{method?:string,body?:unknown}} [options]
  * @returns {Promise<any>} data
@@ -57,9 +77,12 @@ export async function api(pathname, options = {}) {
     init.headers['Content-Type'] = 'application/json';
     init.body = JSON.stringify(options.body);
   }
+  const target = String(pathname).startsWith('/api/')
+    ? `${API_BASE}api/${String(pathname).slice('/api/'.length)}`
+    : pathname;
   let response;
   try {
-    response = await fetch(pathname, init);
+    response = await fetch(target, init);
   } catch {
     throw new ApiError('NETWORK', '无法连接本地服务，请确认终端里的 node 进程仍在运行', 0);
   }

@@ -5,6 +5,7 @@
 
 import {
   api,
+  assetUrl,
   confirmDialog,
   copyText,
   esc,
@@ -1442,14 +1443,14 @@ export function reportDialog(options) {
       // 两段式：先确认浏览器能取到报告（200），再提交已读
       let fetchedOk = false;
       try {
-        const check = await fetch(report.url, { cache: 'no-store' });
+        const check = await fetch(assetUrl(report.url), { cache: 'no-store' });
         fetchedOk = check.ok;
       } catch {
         fetchedOk = false;
       }
 
       if (fetchedOk) {
-        window.open(report.url, '_blank', 'noopener');
+        window.open(assetUrl(report.url), '_blank', 'noopener');
         try {
           const marked = await api(`/api/reports/${report.reportKey}/read`, {
             method: 'POST',

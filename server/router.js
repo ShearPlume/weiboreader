@@ -14,6 +14,7 @@ import {
   LIMITS,
   MAX_TEXT_LEN,
   MODES,
+  PROJECT_ROOT,
   VERSION,
   WEB_DIR,
   modeList,
@@ -725,6 +726,100 @@ async function hProfiles() {
   return { items: profiles.loadProfiles() };
 }
 
+/* --- 展示页发布（导出静态快照 → 上传 COS） --- */
+
+const SHOWCASE_COS_CONF = process.env.SHOWCASE_COS_CONF || '/home/admin/.cos.conf';
+const SHOWCASE_COOKIE_FILE =
+  process.env.SHOWCASE_COOKIE_FILE || '/home/admin/IdolGallary/backend/weibo_cookies.json';
+
+let showcasePublishing = false;
+
+/** 以子进程方式执行 tools/ 下的 Node 脚本，收集输出。 */
+function runNodeScript(args, timeoutMs) {
+  return new Promise((resolve) => {
+    execFile(
+      process.execPath,
+      args,
+      { cwd: PROJECT_ROOT, timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024 },
+      (err, stdout, stderr) => {
+        resolve({
+          code: err ? (typeof err.code === 'number' ? err.code : 1) : 0,
+          stdout: String(stdout || ''),
+          stderr: String(stderr || ''),
+          error: err && err.killed ? '执行超时被终止' : '',
+        });
+      }
+    );
+  });
+}
+
+async function hShowcaseStatus() {
+  return {
+    cosConf: { path: SHOWCASE_COS_CONF, exists: fs.existsSync(SHOWCASE_COS_CONF) },
+    cookieFile: { path: SHOWCASE_COOKIE_FILE, exists: fs.existsSync(SHOWCASE_COOKIE_FILE) },
+    showcaseUrl: '/fakeaccount/',
+    busy: showcasePublishing,
+  };
+}
+
+async function hShowcasePublish(ctx) {
+  if (showcasePublishing) throw new AppError('CONFLICT', '已有发布任务在运行，请稍候', 409);
+  const body = ctx.body || {};
+  const mode = ['all', 'data', 'static'].includes(body.mode) ? body.mode : 'all';
+  const uid = String(body.uid || '').trim();
+  if (uid && !/^\d{1,20}$/.test(uid)) throw new AppError('INVALID_ID', '账号 UID 不合法', 400);
+  if (!fs.existsSync(SHOWCASE_COS_CONF)) {
+    throw new AppError('IO_ERROR', `未找到 COS 配置文件：${SHOWCASE_COS_CONF}`, 500, {
+      hint: '通过环境变量 SHOWCASE_COS_CONF 指定 coscmd 配置文件',
+    });
+  }
+
+  showcasePublishing = true;
+  const steps = [];
+  try {
+    if (body.withProfiles && !body.dryRun) {
+      if (fs.existsSync(SHOWCASE_COOKIE_FILE)) {
+        steps.push({
+          step: 'profiles',
+          ...(await runNodeScript(
+            [
+              path.join(PROJECT_ROOT, 'tools', 'fetch-profiles.mjs'),
+              '--cookie-file',
+              SHOWCASE_COOKIE_FILE,
+              '--authors',
+              '--delay',
+              '400',
+            ],
+            540000
+          )),
+        });
+      } else {
+        steps.push({
+          step: 'profiles',
+          code: -1,
+          stdout: '',
+          stderr: `未找到 cookie 文件：${SHOWCASE_COOKIE_FILE}（已跳过资料/头像刷新）`,
+        });
+      }
+    }
+
+    const args = [
+      path.join(PROJECT_ROOT, 'tools', 'publish-showcase.mjs'),
+      '--cos-conf',
+      SHOWCASE_COS_CONF,
+      '--mode',
+      mode,
+    ];
+    if (uid) args.push('--uid', uid);
+    if (body.dryRun) args.push('--dry-run');
+    if (body.skipAvatars) args.push('--skip-avatars');
+    steps.push({ step: 'publish', ...(await runNodeScript(args, 300000)) });
+  } finally {
+    showcasePublishing = false;
+  }
+  return { steps };
+}
+
 async function hExport(ctx) {
   const payload = exchange.buildExport();
   const body = JSON.stringify(payload, null, 2);
@@ -810,6 +905,8 @@ const ROUTES = [
   ['GET', /^\/api\/pricing$/, hPricing],
 
   ['GET', /^\/api\/profiles$/, hProfiles],
+  ['GET', /^\/api\/showcase\/status$/, hShowcaseStatus],
+  ['POST', /^\/api\/showcase\/publish$/, hShowcasePublish],
 
   ['GET', /^\/api\/exchange\/export$/, hExport],
   ['POST', /^\/api\/exchange\/import$/, hImport],
