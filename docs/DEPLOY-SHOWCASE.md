@@ -98,6 +98,8 @@ node tools/publish-showcase.mjs --cos-conf /home/admin/.cos.conf --dry-run
 
 1. `users.json` / `profiles.json` 重新导出；
 2. `records/<uid>/<mode>.json` 重新生成（含 `total`、`unread`）；
+   **每个账号固定导出全部 6 种模式**，没有数据的模式也会写空快照（`{items:[],total:0,unread:0}`），
+   这样页面永远不会因为静态文件缺失回落到 API 再遇到 404；
 3. 按 MD5 对比 COS 上的 ETag，只上传变化的文件；
 4. 页面刷新后直接读到新数据，**不需要重启 Node**。
 
@@ -177,6 +179,16 @@ curl -sS https://mirugumi-space-1382800327.cos.ap-guangzhou.myqcloud.com/fakeacc
 #    - /fakeaccount/api/ 请求应为 0 次（除非静态快照缺失）
 ```
 
+### 页面报「请求失败（HTTP 404）」
+
+1. 先强制刷新：`Ctrl+F5`，或直接打开
+   `https://idolgallery.xyz/fakeaccount/?v=<任意时间戳>`（绕过微信/浏览器缓存）；
+2. 页面错误框现在会显示**具体失败的 URL**，把它和浏览器 Network 里的 404 一起发出来；
+3. 确认静态快照是否存在：
+   `curl -I https://mirugumi-space-1382800327.cos.ap-guangzhou.myqcloud.com/fakeaccount/records/<uid>/<mode>.json`
+   若 404，重新执行 `node tools/publish-showcase.mjs --uid <uid>`；
+4. 微信内置浏览器缓存很顽固，必要时在「设置 → 通用 → 存储空间」清理，或换系统浏览器验证。
+
 ## 7. 回滚
 
 - 代码：`git reset --hard <上一个提交> && pm2 restart weibo-showcase`
@@ -193,3 +205,23 @@ curl -sS https://mirugumi-space-1382800327.cos.ap-guangzhou.myqcloud.com/fakeacc
   在本机预取到 `data/avatars/`，再随静态发布上传。
 - 静态 JSON 变化时使用 `Cache-Control: no-cache`，页面用 `cache: 'no-store'` 读取，避免看到旧数据；
   CSS/JS 通过 `?v=<发布版本>` 刷新缓存。
+
+## 9. 服务器后台（/fakeadmin）
+
+为了不必每次本地操作，服务器上同时暴露了只给管理员使用的后台（原有后台 + 新增「展示页」页）。
+
+- 地址：<https://idolgallery.xyz/fakeadmin/>
+- 认证：nginx Basic Auth，凭据文件 `/etc/letsencrypt/fakeadmin.htpasswd`（用户 `admin`，密码请自行修改）
+- 反向代理：`/fakeadmin/` → `http://172.17.0.1:7788/`，因此 `/fakeadmin/api/*`、`/fakeadmin/reports/*` 都走后端；
+  前端 `api.js` 会自动按当前路径加前缀，支持子路径部署。
+- 环境变量（pm2 `weibo-showcase`）：
+  - `SHOWCASE_COS_CONF=/home/admin/.cos.conf`
+  - `SHOWCASE_COOKIE_FILE=/home/admin/IdolGallary/backend/weibo_cookies.json`
+- 新增「展示页」页做的事：
+  1. 可选先跑 `tools/fetch-profiles.mjs --authors`（补新账号/新作者的资料与头像）；
+  2. 跑 `tools/publish-showcase.mjs`（导出静态快照 + 增量上传 COS）；
+  3. 页面直接显示执行日志。
+- 支持「只发布数据」「预演（不上传）」「指定账号（只重建该 uid 的记录快照）」。
+- 典型使用顺序：**取数页同步互动数据 → 展示页 → 勾选「先刷新资料与头像」→ 发布**。
+
+> 后台具备取数等写操作，必须保持 Basic Auth 与 HTTPS；不要把 `/fakeadmin` 的凭据写进仓库或展示页。
