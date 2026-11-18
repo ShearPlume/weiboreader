@@ -53,3 +53,10 @@ node --test
 - token 只保存在本机 `data/config.json`，任何接口响应只回传末 4 位
 - 订阅定时检查跟随进程运行，关闭窗口即停止
 - 同一 `data/` 目录只允许一个实例写入（有文件锁保护）
+
+## 微博界面展示页
+
+`web/showcase.html` 使用本地归档数据还原微博「消息 / 评论 / 我」界面，只读展示，不影响后台管理。
+本地访问 `http://127.0.0.1:7788/showcase.html`。
+
+线上部署、COS 静态加速与数据增量发布流程见 [docs/DEPLOY-SHOWCASE.md](docs/DEPLOY-SHOWCASE.md)。

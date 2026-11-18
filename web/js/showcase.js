@@ -20,6 +20,26 @@ const BASE = (() => {
   return `${pathname}/`;
 })();
 const IS_DEPLOYED = BASE !== '/';
+
+/** 静态资源根：线上由 <base> 指向 COS 广州，本地退回同源。 */
+const STATIC_BASE = new URL('.', document.baseURI);
+const USE_STATIC = IS_DEPLOYED || STATIC_BASE.origin !== window.location.origin;
+
+function staticUrl(pathname) {
+  return new URL(pathname, STATIC_BASE).href;
+}
+
+/** 优先读 CDN 上的静态 JSON 快照；本地开发或未发布时返回 null，由调用方回落 API。 */
+async function fetchStatic(pathname) {
+  if (!USE_STATIC) return null;
+  try {
+    const response = await fetch(staticUrl(pathname), { cache: 'no-store' });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
 /** 单次读取的记录条数上限（服务端 pageSize 上限 200）。 */
 const PAGE_SIZE = 200;
 /** 卡片列表最多渲染条数，避免一次插入上千节点。 */
@@ -121,12 +141,16 @@ let tipTimer = null;
  * ------------------------------------------------------------------ */
 
 async function loadUsers() {
+  const staticDoc = await fetchStatic('users.json');
+  if (staticDoc && Array.isArray(staticDoc.items)) return staticDoc.items;
   const data = await api(`${BASE}api/users`);
   return Array.isArray(data && data.items) ? data.items : [];
 }
 
-/** 读取本地缓存的用户资料（头像/简介/粉丝数）；缺失时返回空表。 */
+/** 读取用户资料（头像/简介/粉丝数）：优先 CDN 快照，缺失时回落本地 API。 */
 async function loadProfiles() {
+  const staticDoc = await fetchStatic('profiles.json');
+  if (staticDoc && staticDoc.items && typeof staticDoc.items === 'object') return staticDoc.items;
   try {
     const data = await api(`${BASE}api/profiles`);
     return data && data.items && typeof data.items === 'object' ? data.items : {};
@@ -135,12 +159,16 @@ async function loadProfiles() {
   }
 }
 
-/** 读取某账号某模式的记录（同参数在会话内只请求一次）。 */
+/** 读取某账号某模式的记录：优先 CDN 静态快照，缺失时回落本地 API（同参数只请求一次）。 */
 function records(uid, mode) {
   const key = `${uid}:${mode}`;
   if (!state.cache.has(key)) {
-    const url = `${BASE}api/owners/users/${encodeURIComponent(uid)}/records?mode=${encodeURIComponent(mode)}&pageSize=${PAGE_SIZE}`;
-    const pending = api(url).catch((err) => {
+    const apiUrl = `${BASE}api/owners/users/${encodeURIComponent(uid)}/records?mode=${encodeURIComponent(mode)}&pageSize=${PAGE_SIZE}`;
+    const pending = (async () => {
+      const staticDoc = await fetchStatic(`records/${encodeURIComponent(uid)}/${encodeURIComponent(mode)}.json`);
+      if (staticDoc && Array.isArray(staticDoc.items)) return staticDoc;
+      return api(apiUrl);
+    })().catch((err) => {
       state.cache.delete(key);
       throw err;
     });
@@ -154,8 +182,10 @@ async function itemsOf(uid, mode) {
   return Array.isArray(data && data.items) ? data.items : [];
 }
 
-/** 某模式的未读数（服务端按 unread=1 过滤后的 total）。 */
+/** 某模式的未读数：静态快照直接带 unread，回落到 API 时才额外查一次。 */
 async function unreadTotal(uid, mode) {
+  const doc = await records(uid, mode);
+  if (doc && doc.unread !== undefined && Number.isFinite(Number(doc.unread))) return Number(doc.unread);
   const url = `${BASE}api/owners/users/${encodeURIComponent(uid)}/records?mode=${encodeURIComponent(mode)}&unread=1&pageSize=1`;
   const data = await api(url);
   return Number(data && data.total) || 0;
@@ -181,10 +211,13 @@ function avatarHtml(name, seed, size, urlOverride = '') {
   const fontSize = Math.max(12, Math.round(size * 0.4));
   const uid = String(seed || '');
   const profile = state.profiles[uid] || {};
-  // 头像统一走 `<BASE>avatar/<uid>.jpg`：本地由 Node 提供，线上由 nginx 转发到 COS
+  // 头像走静态根（线上 <base> 指向 COS 广州，本地为同源），版本号用于刷新缓存
   const hasAvatar = Boolean(urlOverride || profile.avatarUrl) && /^\d{1,20}$/.test(uid);
+  const file = profile.avatarFile || `${uid}.jpg`;
+  const version = profile.fetchedAtMs ? `?v=${profile.fetchedAtMs}` : '';
+  const src = staticUrl(`avatar/${file}`) + version;
   const img = hasAvatar
-    ? `<img src="${BASE}avatar/${uid}.jpg" alt="" loading="lazy" referrerpolicy="no-referrer">`
+    ? `<img src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer">`
     : '';
   return `<span class="avatar" style="--h:${hueOf(seed || name)};width:${size}px;height:${size}px;font-size:${fontSize}px" aria-hidden="true">${esc(label)}${img}</span>`;
 }

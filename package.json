@@ -9,6 +9,7 @@
   },
   "scripts": {
     "start": "node server/server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "publish:showcase": "node tools/publish-showcase.mjs"
   }
 }
