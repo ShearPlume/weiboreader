@@ -12,8 +12,8 @@ import { fileURLToPath } from 'node:url';
 export const VERSION = '1.0.0';
 /** 应用名称。 */
 export const APP_NAME = 'Weibo Reader';
-/** 监听主机：仅回环，绝不 0.0.0.0。 */
-export const HOST = '127.0.0.1';
+/** 监听主机：默认仅回环；部署到反向代理后可用环境变量 HOST 指定（如 172.17.0.1）。 */
+export const HOST = process.env.HOST || '127.0.0.1';
 /** 监听端口，可用环境变量 PORT 覆盖。 */
 export const PORT = Number(process.env.PORT || 7788);
 /** 项目根目录（server/ 的上一级）。 */

@@ -27,6 +27,7 @@ import * as report from './report.js';
 import * as exchange from './exchange.js';
 import * as demo from './demo.js';
 import * as scheduler from './scheduler.js';
+import * as profiles from './profiles.js';
 
 /** AppError 透出（各模块统一从这里取类型可以少一条 import）。 */
 export { AppError };
@@ -719,6 +720,11 @@ async function hPricing(ctx) {
 
 /* --- 导入导出 / 演示 --- */
 
+/** 用户资料缓存（展示页专用；只读，不触发微博请求）。 */
+async function hProfiles() {
+  return { items: profiles.loadProfiles() };
+}
+
 async function hExport(ctx) {
   const payload = exchange.buildExport();
   const body = JSON.stringify(payload, null, 2);
@@ -802,6 +808,8 @@ const ROUTES = [
   ['GET', /^\/api\/settings$/, hSettingsGet],
   ['PATCH', /^\/api\/settings$/, hSettingsPatch],
   ['GET', /^\/api\/pricing$/, hPricing],
+
+  ['GET', /^\/api\/profiles$/, hProfiles],
 
   ['GET', /^\/api\/exchange\/export$/, hExport],
   ['POST', /^\/api\/exchange\/import$/, hImport],
@@ -932,6 +940,10 @@ export async function handle(req, res) {
     pathname = safeDecode(url.pathname);
     if (pathname === '/api' || pathname.startsWith('/api/')) {
       await handleApi(req, res, pathname.replace(/\/+$/, '') || '/api');
+      return;
+    }
+    if (pathname.startsWith('/avatar/')) {
+      profiles.serveAvatar(req, res, pathname);
       return;
     }
     if (pathname.startsWith('/reports/')) {
