@@ -655,7 +655,7 @@ a.card-text {
   flex: none;
   display: flex;
   align-items: stretch;
-  height: 56px;
+  height: calc(56px + env(safe-area-inset-bottom, 0px));
   padding-bottom: env(safe-area-inset-bottom, 0);
   border-top: 1px solid #ededed;
   background: #fff;
@@ -1385,13 +1385,16 @@ a.card-text {
 @media (max-width: 520px), (max-height: 720px) {
   body {
     display: block;
+    overflow: hidden;
     background: #fff;
   }
 
   .phone {
+    position: fixed;
+    top: 0;
+    left: 0;
     width: 100%;
-    height: 100vh;
-    height: 100dvh;
+    height: var(--app-height, 100dvh);
     max-height: none;
     border-radius: 0;
     box-shadow: none;
@@ -1468,5 +1471,17 @@ body.is-fullscreen .statusbar {
 @media (display-mode: fullscreen) {
   .statusbar {
     display: flex;
+  }
+}
+
+/* iOS 独立窗口：安全区由外层承担，避免内容顶到状态栏下面被系统材质模糊 */
+@media (display-mode: standalone) {
+  .phone {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .navbar {
+    height: 48px;
+    padding-top: 0;
   }
 }

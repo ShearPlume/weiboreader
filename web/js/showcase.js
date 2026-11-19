@@ -962,6 +962,14 @@ function tickClock() {
   if (node) node.textContent = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
 }
 
+/** iOS 独立窗口切走再回来后视口高度会变化，重新计算并锁定 --app-height。 */
+function syncAppHeight() {
+  const height = Math.round(
+    Math.max(window.innerHeight || 0, window.visualViewport ? window.visualViewport.height : 0)
+  );
+  if (height > 0) document.documentElement.style.setProperty('--app-height', `${height}px`);
+}
+
 /* ------------------------------------------------------------------ *
  * 启动
  * ------------------------------------------------------------------ */
@@ -989,6 +997,15 @@ async function boot() {
     state.menu = null;
     render();
   });
+
+  syncAppHeight();
+  window.addEventListener('resize', syncAppHeight);
+  window.addEventListener('orientationchange', syncAppHeight);
+  window.addEventListener('pageshow', syncAppHeight);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) syncAppHeight();
+  });
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', syncAppHeight);
 
   try {
     const [users, profiles] = await Promise.all([loadUsers(), loadProfiles()]);
