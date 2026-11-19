@@ -30,6 +30,7 @@ const MIME = {
   '.css': 'text/css; charset=utf-8',
   '.js': 'application/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  '.webmanifest': 'application/manifest+json',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.png': 'image/png',
@@ -243,6 +244,10 @@ function buildIndexHtml(opts, stamp) {
     .replace('href="css/showcase.css"', `href="css/showcase.css?v=${stamp}"`)
     .replace('src="js/showcase.js"', `src="js/showcase.js?v=${stamp}"`);
   html = html.replace('<head>', `<head>\n<base href="${opts.staticRoot}">`);
+  // manifest 必须与页面同源（PWA 的 start_url/scope 才能落在 idolgallery 域名下）
+  html = html
+    .replace('href="manifest.webmanifest"', `href="/${opts.prefix}manifest.webmanifest"`)
+    .replace('href="icons/icon-180.png"', `href="/${opts.prefix}icons/icon-180.png"`);
   return html;
 }
 
@@ -284,6 +289,37 @@ async function main() {
       ['js/showcase.js', fs.readFileSync(path.join(PROJECT_ROOT, 'web', 'js', 'showcase.js')), 'application/javascript; charset=utf-8', 'public, max-age=31536000, immutable'],
       ['js/api.js', fs.readFileSync(path.join(PROJECT_ROOT, 'web', 'js', 'api.js')), 'application/javascript; charset=utf-8', 'public, max-age=31536000, immutable'],
     ];
+
+    // PWA：manifest 与页面同源提供，start_url 指向 /<prefix>/（nginx → COS index）
+    const manifest = {
+      name: '微博通知 · 本地归档展示',
+      short_name: '微博展示',
+      description: '用本地归档数据还原的微博通知界面',
+      lang: 'zh-CN',
+      start_url: './',
+      scope: './',
+      display: 'standalone',
+      display_override: ['fullscreen', 'standalone'],
+      background_color: '#ffffff',
+      theme_color: '#ffffff',
+      icons: [
+        { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+        { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+      ],
+    };
+    assets.push([
+      'manifest.webmanifest',
+      Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, 'utf8'),
+      'application/manifest+json',
+      'no-cache',
+    ]);
+    for (const icon of ['icon-180.png', 'icon-192.png', 'icon-512.png']) {
+      const iconFile = path.join(PROJECT_ROOT, 'web', 'icons', icon);
+      if (fs.existsSync(iconFile)) {
+        assets.push([`icons/${icon}`, fs.readFileSync(iconFile), 'image/png', 'public, max-age=31536000, immutable']);
+      }
+    }
+
     for (const [key, body, type, cache] of assets) {
       await upload(`${opts.prefix}${key}`, Buffer.isBuffer(body) ? body : Buffer.from(body, 'utf8'), type, cache);
     }

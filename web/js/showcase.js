@@ -110,6 +110,8 @@ const ICON = {
     '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="8" r="3.6" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M3.8 20c.7-3.6 3.2-5.5 6.2-5.5 2 0 3.8.9 4.8 2.6M18 14.5v5M15.5 17h5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
   scan: '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3.5H5.5a2 2 0 0 0-2 2V8M16 3.5h2.5a2 2 0 0 1 2 2V8M8 20.5H5.5a2 2 0 0 1-2-2V16M16 20.5h2.5a2 2 0 0 0 2-2V16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M3.5 12h17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
   gear: '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
+  expand: '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  compress: '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h5V4M20 9h-5V4M4 15h5v5M20 15h-5v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 
 /** 底部导航配置。 */
@@ -133,7 +135,7 @@ const state = {
   seq: 0,
 };
 
-const el = { navbar: null, screen: null, tabbar: null, overlay: null, tip: null };
+const el = { navbar: null, screen: null, tabbar: null, overlay: null, tip: null, fsBtn: null };
 let tipTimer = null;
 
 /* ------------------------------------------------------------------ *
@@ -235,6 +237,9 @@ function userAvatar(user, size) {
 
 /** 移动端同标签页跳转便于唤起微博 App，桌面端新开标签页。 */
 const IS_MOBILE = /Android|iPhone|iPad|iPod|HarmonyOS|Mobile/i.test(navigator.userAgent);
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+const IS_STANDALONE =
+  window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 
 function externalLinkAttrs(href) {
   const value = String(href || '');
@@ -750,6 +755,11 @@ async function buildMe() {
       </div>`
     : '';
 
+  const iosHint =
+    IS_IOS && !IS_STANDALONE
+      ? '<p class="page-note">iPhone 去掉浏览器上下栏：Safari 分享 → 添加到主屏幕。</p>'
+      : '';
+
   return `
     <div class="me-page">
       <section class="me-header">
@@ -766,6 +776,7 @@ async function buildMe() {
       <div class="me-card me-accounts" id="meAccounts">${state.users.map(acctRow).join('')}</div>
       ${adminLinkHtml('打开后台管理（取数 / 搜索 / 报告）')}
       <p class="page-note">展示页只读取本地归档，不发起取数，也不会改变未读状态。</p>
+      ${iosHint}
     </div>`;
 }
 
@@ -799,6 +810,31 @@ function tip(message) {
   el.tip.classList.add('show');
   clearTimeout(tipTimer);
   tipTimer = setTimeout(() => el.tip.classList.remove('show'), 1600);
+}
+
+function updateFullscreenUi() {
+  const active = Boolean(document.fullscreenElement);
+  document.body.classList.toggle('is-fullscreen', active);
+  if (el.fsBtn) {
+    el.fsBtn.innerHTML = active ? ICON.compress : ICON.expand;
+    el.fsBtn.setAttribute('aria-label', active ? '退出全屏' : '全屏');
+  }
+}
+
+async function toggleFullscreen() {
+  try {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+      return;
+    }
+    if (document.documentElement.requestFullscreen) {
+      await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+      return;
+    }
+    tip('当前浏览器不支持网页全屏（顶部仿真状态栏已隐藏）');
+  } catch {
+    tip('当前浏览器不允许进入全屏');
+  }
 }
 
 function setScreen(markup) {
@@ -936,6 +972,14 @@ async function boot() {
   el.tabbar = document.getElementById('tabbar');
   el.overlay = document.getElementById('overlayRoot');
   el.tip = document.getElementById('floatTip');
+  el.fsBtn = document.getElementById('fsBtn');
+  if (el.fsBtn) {
+    el.fsBtn.innerHTML = ICON.expand;
+    el.fsBtn.addEventListener('click', () => {
+      void toggleFullscreen();
+    });
+    document.addEventListener('fullscreenchange', updateFullscreenUi);
+  }
 
   tickClock();
   setInterval(tickClock, 30000);

@@ -1402,3 +1402,71 @@ a.card-text {
     height: calc(32px + env(safe-area-inset-top, 0));
   }
 }
+
+/* 全屏按钮：仅移动端显示；桌面端保留手机外框 */
+.fs-btn {
+  position: absolute;
+  right: 12px;
+  bottom: 70px;
+  z-index: 35;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(30, 30, 32, 0.46);
+  color: #fff;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+}
+
+.fs-btn .i {
+  width: 20px;
+  height: 20px;
+}
+
+.fs-btn:active {
+  transform: scale(0.94);
+}
+
+body.is-fullscreen {
+  display: block;
+  background: #fff;
+}
+
+body.is-fullscreen .phone {
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  max-height: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+body.is-fullscreen .statusbar {
+  display: flex;
+}
+
+@media (max-width: 520px), (max-height: 720px) {
+  /* 真机已有系统状态栏，隐藏仿真状态栏避免电量重复 */
+  .statusbar {
+    display: none;
+  }
+
+  .navbar {
+    height: calc(48px + env(safe-area-inset-top, 0px));
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .fs-btn {
+    display: inline-flex;
+  }
+}
+
+/* PWA 独立窗口：Android 的 display_override=fullscreen 时系统栏隐藏，显示仿真状态栏 */
+@media (display-mode: fullscreen) {
+  .statusbar {
+    display: flex;
+  }
+}
