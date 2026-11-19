@@ -1390,13 +1390,16 @@ a.card-text {
     background: #fff;
   }
 
+  html {
+    height: 100%;
+    overflow: hidden;
+  }
+
   .phone {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100vh;
-    height: max(100dvh, var(--app-height, 0px));
+    inset: 0;
+    width: auto;
+    height: auto;
     max-height: none;
     border-radius: 0;
     box-shadow: none;
@@ -1412,7 +1415,7 @@ a.card-text {
 .fs-btn {
   position: absolute;
   right: 12px;
-  bottom: 70px;
+  bottom: calc(70px + env(safe-area-inset-bottom, 0px));
   z-index: 35;
   display: none;
   align-items: center;

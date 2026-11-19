@@ -45,6 +45,28 @@ function newRaw() {
   return raw;
 }
 
+/** 默认邀请码只开放测试账号（恐龙毛衫）。 */
+export const DEFAULT_SCOPE_ACCOUNTS = Object.freeze(['7984139147']);
+
+function normalizeAccounts(accounts) {
+  if (!Array.isArray(accounts)) return [];
+  const out = [];
+  for (const raw of accounts) {
+    const uid = String(raw || '').trim();
+    if (/^\d{1,20}$/.test(uid) && !out.includes(uid)) out.push(uid);
+    if (out.length >= 100) break;
+  }
+  return out;
+}
+
+function scopeOf(entry) {
+  if (entry.scope === 'all') return { scope: 'all', accounts: [] };
+  if (entry.scope === 'selected') return { scope: 'selected', accounts: normalizeAccounts(entry.accounts) };
+  if (entry.scope === 'default') return { scope: 'default', accounts: [...DEFAULT_SCOPE_ACCOUNTS] };
+  // 旧邀请码没有 scope：保持“全部账号”的行为
+  return { scope: 'all', accounts: [] };
+}
+
 function statusOf(entry) {
   if (!entry.enabled) return 'disabled';
   if (entry.expiresAtMs && Date.now() > entry.expiresAtMs) return 'expired';
@@ -60,6 +82,7 @@ function dto(entry) {
     expiresAtMs: entry.expiresAtMs,
     enabled: Boolean(entry.enabled),
     status: statusOf(entry),
+    ...scopeOf(entry),
   };
 }
 
@@ -70,14 +93,17 @@ export function list() {
 }
 
 /** 生成邀请码；expiresInDays=0 表示永不过期。 */
-export function create({ note = '', expiresInDays = 0 } = {}) {
+export function create({ note = '', expiresInDays = 0, scope = 'default', accounts = [] } = {}) {
   const doc = read();
   let raw = newRaw();
   while (doc.codes[raw]) raw = newRaw();
   const days = Math.max(0, Math.min(3650, Number(expiresInDays) || 0));
+  const normalized = scope === 'selected' ? normalizeAccounts(accounts) : scope === 'all' ? [] : [...DEFAULT_SCOPE_ACCOUNTS];
   const entry = {
     code: display(raw),
     note: String(note || '').trim().slice(0, 80),
+    scope: scope === 'all' ? 'all' : scope === 'selected' ? 'selected' : 'default',
+    accounts: normalized,
     createdAtMs: Date.now(),
     expiresAtMs: days ? Date.now() + days * 86400000 : null,
     uses: 0,
@@ -119,5 +145,5 @@ export function verify(code) {
   if (entry.expiresAtMs && Date.now() > entry.expiresAtMs) return { valid: false, reason: '邀请码已过期' };
   entry.uses = (Number(entry.uses) || 0) + 1;
   write(doc);
-  return { valid: true, uses: entry.uses };
+  return { valid: true, uses: entry.uses, ...scopeOf(entry) };
 }

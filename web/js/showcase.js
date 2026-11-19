@@ -134,6 +134,7 @@ const TABS = [
 const state = {
   users: [],
   profiles: {},
+  invite: null,
   uid: null,
   route: 'messages',
   menu: null,
@@ -1018,7 +1019,13 @@ async function verifyInvite(code) {
       return { ok: false, reason: message, network: response.status >= 500 };
     }
     if (!payload || payload.ok !== true) return { ok: false, reason: '验证服务返回异常', network: true };
-    if (payload.data && payload.data.valid) return { ok: true };
+    if (payload.data && payload.data.valid) {
+      return {
+        ok: true,
+        scope: payload.data.scope || 'all',
+        accounts: Array.isArray(payload.data.accounts) ? payload.data.accounts.map(String) : [],
+      };
+    }
     return { ok: false, reason: (payload.data && payload.data.reason) || '邀请码无效' };
   } catch {
     return { ok: false, reason: '验证服务暂时不可用，请稍后再试', network: true };
@@ -1037,7 +1044,7 @@ async function requireInvite() {
     const result = await verifyInvite(stored);
     if (result.ok) {
       hideGate();
-      return true;
+      return result;
     }
     initialMessage = result.reason || '';
     if (!result.network) {
@@ -1048,7 +1055,7 @@ async function requireInvite() {
       }
     }
   }
-  if (!el.gate || !el.gateBtn || !el.gateInput) return true;
+  if (!el.gate || !el.gateBtn || !el.gateInput) return { ok: true, scope: 'all', accounts: [] };
   showGate(initialMessage);
   return new Promise((resolve) => {
     const submit = async () => {
@@ -1067,7 +1074,7 @@ async function requireInvite() {
           /* 隐私模式下本次仍可访问 */
         }
         hideGate();
-        resolve(true);
+        resolve(result);
         return;
       }
       el.gateMsg.textContent = result.reason || '邀请码无效';
@@ -1084,6 +1091,14 @@ async function requireInvite() {
 /* ------------------------------------------------------------------ *
  * 启动
  * ------------------------------------------------------------------ */
+
+/** 按邀请码的可见范围过滤账号（仅影响展示页 UI）。 */
+function filterUsersByInvite(users) {
+  const invite = state.invite;
+  if (!invite || invite.scope === 'all') return users;
+  const allowed = new Set((invite.accounts || []).map(String));
+  return users.filter((user) => allowed.has(String(user.uid)));
+}
 
 async function boot() {
   el.navbar = document.getElementById('navbar');
@@ -1119,6 +1134,7 @@ async function boot() {
   window.addEventListener('pageshow', () => {
     syncAppHeight();
     window.setTimeout(() => {
+      window.scrollTo(0, 0);
       void document.documentElement.offsetHeight;
       syncAppHeight();
     }, 300);
@@ -1134,12 +1150,13 @@ async function boot() {
   });
   if (window.visualViewport) window.visualViewport.addEventListener('resize', syncAppHeight);
 
-  const allowed = await requireInvite();
-  if (!allowed) return;
+  const invite = await requireInvite();
+  if (!invite) return;
+  state.invite = invite;
 
   try {
     const [users, profiles] = await Promise.all([loadUsers(), loadProfiles()]);
-    state.users = users;
+    state.users = filterUsersByInvite(users);
     state.profiles = profiles;
   } catch (err) {
     setScreen(errorHtml(err));

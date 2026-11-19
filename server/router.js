@@ -849,7 +849,19 @@ async function hInvitesList() {
 
 async function hInviteCreate(ctx) {
   const body = ctx.body || {};
-  return { invite: invites.create({ note: body.note, expiresInDays: body.expiresInDays }) };
+  const scope = ['default', 'all', 'selected'].includes(body.scope) ? body.scope : 'default';
+  const accounts = Array.isArray(body.accounts) ? body.accounts : [];
+  if (scope === 'selected' && !accounts.some((uid) => /^\d{1,20}$/.test(String(uid)))) {
+    throw new AppError('BAD_REQUEST', '指定账号范围时请至少选择一个账号', 400);
+  }
+  return {
+    invite: invites.create({
+      note: body.note,
+      expiresInDays: body.expiresInDays,
+      scope,
+      accounts,
+    }),
+  };
 }
 
 async function hInvitePatch(ctx) {
