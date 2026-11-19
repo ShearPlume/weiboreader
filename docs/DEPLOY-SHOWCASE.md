@@ -225,3 +225,21 @@ curl -sS https://mirugumi-space-1382800327.cos.ap-guangzhou.myqcloud.com/fakeacc
 - 典型使用顺序：**取数页同步互动数据 → 展示页 → 勾选「先刷新资料与头像」→ 发布**。
 
 > 后台具备取数等写操作，必须保持 Basic Auth 与 HTTPS；不要把 `/fakeadmin` 的凭据写进仓库或展示页。
+
+## 10. GitHub Actions 自动部署
+
+工作流：`.github/workflows/deploy.yml`
+
+- 触发：push 到 `main`，或手动 `workflow_dispatch`
+- 步骤：
+  1. `node --test`（115 项，全部通过才继续）
+  2. 通过 SSH 连接服务器：`git fetch` + `git reset --hard origin/main`
+  3. `node tools/publish-showcase.mjs --cos-conf /home/admin/.cos.conf --mode static`（只发布 HTML/CSS/JS 到 COS）
+  4. 用固定环境变量重启 pm2 `weibo-showcase`
+- GitHub Secrets（已配置）：
+  - `SSH_HOST`、`SSH_USER`、`SSH_KEY`（ed25519 部署私钥）
+  - 对应公钥已加入服务器 `/root/.ssh/authorized_keys` 与 `/home/admin/.ssh/authorized_keys`
+- 数据不在 git 中：流水线**不会**同步 `data/`，也**不会**发布头像/数据快照。
+  新增互动数据或头像后，仍在后台「展示页」点发布（或手动运行 `publish-showcase.mjs`）。
+- 回滚：把 `main` 回退到上一个提交后 push，流水线会自动重新部署；
+  服务器代码与静态资源都会回到该提交对应的状态。

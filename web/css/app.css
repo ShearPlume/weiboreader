@@ -1357,3 +1357,150 @@ table.data tr:hover td {
   max-height: 320px;
   overflow-y: auto;
 }
+
+/* ------------------------- 移动端适配（后台） ------------------------- */
+@media (max-width: 860px) {
+  body {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  .topbar {
+    position: static;
+    height: auto;
+    min-height: 56px;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 12px;
+  }
+
+  .topbar .brand {
+    flex: 1 1 auto;
+  }
+
+  .topbar-right {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 6px;
+  }
+
+  .balance-chip {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 6px 8px;
+  }
+
+  .account-chip {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .layout {
+    display: block;
+    min-height: 0;
+  }
+
+  .sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 25;
+    height: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 2px;
+    padding: 6px 8px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .nav-item {
+    flex: 0 0 calc(25% - 2px);
+    flex-direction: column;
+    gap: 3px;
+    padding: 6px 4px;
+    font-size: 11px;
+    line-height: 1.2;
+    text-align: center;
+  }
+
+  .nav-item .nav-ico {
+    font-size: 16px;
+  }
+
+  .sidebar-foot {
+    display: none;
+  }
+
+  .view {
+    padding: 12px 10px 40px;
+  }
+
+  .page-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .page-actions {
+    margin-left: 0;
+  }
+
+  .form-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .form-row > .field,
+  .form-row > .field.w-sm,
+  .form-row > .field.w-md {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+
+  .card {
+    padding: 14px 12px;
+    border-radius: 10px;
+  }
+
+  .table-wrap {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  table.data {
+    min-width: 640px;
+  }
+
+  .modal-mask {
+    padding: 10px;
+  }
+
+  .modal {
+    max-width: 100%;
+    max-height: 92vh;
+    padding: 16px 14px;
+  }
+
+  .toast-wrap {
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    max-width: none;
+  }
+
+  .log-box {
+    height: 170px;
+  }
+
+  .code-box {
+    font-size: 20px;
+    letter-spacing: 2px;
+  }
+
+  .input,
+  .select,
+  .textarea {
+    font-size: 16px;
+  }
+}

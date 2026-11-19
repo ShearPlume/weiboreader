@@ -130,17 +130,21 @@ test('numOrNull：严格判空但保留合法 0（M-1 的统一入口）', () =>
   assert.equal(api.numOrNull('3.5'), 3.5);
 });
 
-test('index.html 引用的静态资源都存在，且没有任何外链（离线可用）', () => {
+test('index.html 引用的静态资源都存在，且除充值入口外无外链（离线可用）', () => {
   const htmlSrc = fs.readFileSync(path.join(WEB_DIR, 'index.html'), 'utf8');
+  const rechargeUrl = 'https://open.weibo.com/cli';
   const refs = [...htmlSrc.matchAll(/(?:src|href)="([^"]+)"/g)].map((m) => m[1]);
   assert.ok(refs.length >= 2);
   for (const ref of refs) {
     if (ref.startsWith('#')) continue;
-    assert.match(ref, /^\//, `${ref} 应为站内绝对路径`);
-    const file = path.join(WEB_DIR, ref.replace(/^\//, ''));
+    if (ref === rechargeUrl) continue;
+    // 允许站内相对路径（便于部署到子路径）与站内绝对路径
+    assert.ok(!/^[a-z][a-z0-9+.-]*:/i.test(ref), `${ref} 应为站内路径`);
+    const file = path.join(WEB_DIR, ref.replace(/^\/+/, ''));
     assert.equal(fs.existsSync(file), true, `index.html 引用的 ${ref} 不存在`);
   }
-  assert.doesNotMatch(htmlSrc, /https?:\/\//i, 'index.html 不得引用外链（离线可用要求）');
+  const offlineHtml = htmlSrc.split(rechargeUrl).join('');
+  assert.doesNotMatch(offlineHtml, /https?:\/\//i, 'index.html 除充值入口外不得引用外链（离线可用要求）');
 });
 
 test('前端源码不得引用外部 CDN/字体（PRD §6 无外链要求）', () => {

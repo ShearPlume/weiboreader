@@ -1,0 +1,55 @@
+﻿name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run tests
+        run: node --test
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: 22
+          script_stop: true
+          command_timeout: 15m
+          script: |
+            set -e
+            cd /home/admin/weibo-reader-web
+            git fetch origin
+            git reset --hard origin/main
+
+            export PATH=/root/.nvm/versions/node/v22.23.1/bin:$PATH
+            export PM2_HOME=/home/admin/.pm2
+
+            # 只发布前端静态资源到 COS；数据快照/头像请在后台「展示页」按需发布
+            node tools/publish-showcase.mjs --cos-conf /home/admin/.cos.conf --mode static
+
+            pm2 delete weibo-showcase >/dev/null 2>&1 || true
+            HOST=172.17.0.1 PORT=7788 NO_OPEN=1 \
+              SHOWCASE_COS_CONF=/home/admin/.cos.conf \
+              SHOWCASE_COOKIE_FILE=/home/admin/IdolGallary/backend/weibo_cookies.json \
+              pm2 start server/server.js --name weibo-showcase
+            pm2 save >/dev/null
+
+            curl -fsS http://172.17.0.1:7788/api/health

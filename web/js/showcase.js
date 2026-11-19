@@ -167,7 +167,13 @@ function records(uid, mode) {
     const pending = (async () => {
       const staticDoc = await fetchStatic(`records/${encodeURIComponent(uid)}/${encodeURIComponent(mode)}.json`);
       if (staticDoc && Array.isArray(staticDoc.items)) return staticDoc;
-      return api(apiUrl);
+      try {
+        return await api(apiUrl);
+      } catch (err) {
+        const wrapped = new Error(err && err.message ? err.message : '数据读取失败');
+        wrapped.detail = new URL(apiUrl, window.location.origin).href;
+        throw wrapped;
+      }
     })().catch((err) => {
       state.cache.delete(key);
       throw err;
@@ -225,6 +231,52 @@ function avatarHtml(name, seed, size, urlOverride = '') {
 /** 账号头像：资料缓存 > 归档 avatarUrl > 首字。 */
 function userAvatar(user, size) {
   return avatarHtml(user && user.screenName, user && user.uid, size, user && user.avatarUrl);
+}
+
+/** 移动端同标签页跳转便于唤起微博 App，桌面端新开标签页。 */
+const IS_MOBILE = /Android|iPhone|iPad|iPod|HarmonyOS|Mobile/i.test(navigator.userAgent);
+
+function externalLinkAttrs(href) {
+  const value = String(href || '');
+  if (!value) return '';
+  return `href="${esc(value)}" target="${IS_MOBILE ? '_self' : '_blank'}" rel="noopener"`;
+}
+
+/** 用户主页（m.weibo.cn 在手机上可唤起微博 App）。 */
+function profileHref(uid) {
+  const value = String(uid || '');
+  return /^\d{1,20}$/.test(value) ? `https://m.weibo.cn/u/${value}` : '';
+}
+
+/** 评论精确定位（?cid=）只对近期记录使用；更早的评论可能已删除，直接打开原微博避免空白。 */
+const COMMENT_CID_MAX_AGE_MS = 60 * 24 * 60 * 60 * 1000;
+
+/**
+ * 记录对应的原微博/评论。
+ * 微博 `?cid=` 只对顶层评论可靠：回复/已删除评论会打开空白页。
+ * 因此只有「近期 + 顶层评论（sourceId == rootId）」精确定位，其余直接打开原微博。
+ */
+function recordHref(record) {
+  const postId = String(record.postId || '');
+  const sourceId = String(record.sourceId || '');
+  const rootId = String(record.rootId || '');
+  const isStatus = record.mode === 'mentions-posts' || record.mode === 'user-posts';
+  if (isStatus) {
+    return postId ? `https://m.weibo.cn/detail/${postId}` : String(record.postUrl || '');
+  }
+  const fresh = Number(record.ms) > 0 && Date.now() - Number(record.ms) <= COMMENT_CID_MAX_AGE_MS;
+  const topLevel = Boolean(rootId) && rootId === sourceId;
+  if (postId && topLevel && fresh && /^\d{1,20}$/.test(sourceId)) {
+    return `https://m.weibo.cn/detail/${postId}?cid=${sourceId}`;
+  }
+  if (postId) return `https://m.weibo.cn/detail/${postId}`;
+  return String(record.postUrl || '');
+}
+
+/** 头像外层加主页链接；没有 UID 时退回纯头像。 */
+function avatarLink(uid, inner) {
+  const href = profileHref(uid);
+  return href ? `<a class="avatar-link" ${externalLinkAttrs(href)} aria-label="打开主页">${inner}</a>` : inner;
 }
 
 function feedTime(ms) {
@@ -392,7 +444,15 @@ function noUsersHtml() {
 
 function errorHtml(err) {
   const message = err && err.message ? err.message : '本地数据读取失败';
-  return `<div class="error-box"><div>${esc(message)}</div><button type="button" data-retry>重试</button></div>`;
+  const detail = err && err.detail ? `<div class="error-detail">${esc(err.detail)}</div>` : '';
+  return `<div class="error-box">
+    <div>${esc(message)}</div>
+    ${detail}
+    <div class="error-actions">
+      <button type="button" data-retry>重试</button>
+      <button type="button" data-hard-refresh>强制刷新</button>
+    </div>
+  </div>`;
 }
 
 function catRow(kind, label, count, route) {
@@ -484,13 +544,14 @@ function cardHtml(rec, kind) {
   const name = rec.author || '微博用户';
   const media = mediaHtml(rec);
   const likes = Number(rec.likes) > 0 ? ` ${Number(rec.likes)}` : '';
+  const linkAttrs = externalLinkAttrs(recordHref(rec));
   return `<article class="card">
-    ${avatarHtml(name, rec.authorUid || name, 44)}
+    ${avatarLink(rec.authorUid, avatarHtml(name, rec.authorUid || name, 44))}
     <div class="card-main">
-      <div class="card-head"><span class="card-name">${esc(name)}</span></div>
+      <div class="card-head"><a class="card-name" ${linkAttrs}>${esc(name)}</a></div>
       <div class="card-sub"><span>${esc(subText(rec, kind))}</span><span>·</span><span>${esc(feedTime(rec.ms))}</span></div>
       <div class="card-body">
-        <div class="card-text">${richText(rec.text)}</div>
+        <a class="card-text" ${linkAttrs}>${richText(rec.text)}</a>
         ${media}
       </div>
       <div class="actions">
@@ -677,10 +738,13 @@ async function buildMe() {
         <div class="me-card-head"><h2>最近互动</h2><button type="button" data-nav="messages">查看更多 ›</button></div>
         <div class="me-visits-scroll">
           ${chats
-            .map(
-              (chat) =>
-                `<button class="me-visit" type="button" data-nav="messages">${avatarHtml(chat.name, chat.uid, 52)}<span class="me-visit-name">${esc(chat.name)}</span></button>`
-            )
+            .map((chat) => {
+              const inner = `${avatarHtml(chat.name, chat.uid, 52)}<span class="me-visit-name">${esc(chat.name)}</span>`;
+              const href = profileHref(chat.uid);
+              return href
+                ? `<a class="me-visit" ${externalLinkAttrs(href)} aria-label="打开主页">${inner}</a>`
+                : `<button class="me-visit" type="button" data-nav="messages">${inner}</button>`;
+            })
             .join('')}
         </div>
       </div>`
@@ -844,6 +908,11 @@ function onClick(event) {
     return;
   }
   if (target.closest('[data-retry]')) render();
+  if (target.closest('[data-hard-refresh]')) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('v', Date.now().toString(36));
+    window.location.replace(url.toString());
+  }
 }
 
 function onImageError(event) {

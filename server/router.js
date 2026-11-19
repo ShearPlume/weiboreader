@@ -766,6 +766,11 @@ async function hShowcasePublish(ctx) {
   if (showcasePublishing) throw new AppError('CONFLICT', '已有发布任务在运行，请稍候', 409);
   const body = ctx.body || {};
   const mode = ['all', 'data', 'static'].includes(body.mode) ? body.mode : 'all';
+  const refresh = ['incremental', 'full', 'none'].includes(body.refresh)
+    ? body.refresh
+    : body.withProfiles
+      ? 'incremental'
+      : 'none';
   const uid = String(body.uid || '').trim();
   if (uid && !/^\d{1,20}$/.test(uid)) throw new AppError('INVALID_ID', '账号 UID 不合法', 400);
   if (!fs.existsSync(SHOWCASE_COS_CONF)) {
@@ -777,22 +782,19 @@ async function hShowcasePublish(ctx) {
   showcasePublishing = true;
   const steps = [];
   try {
-    if (body.withProfiles && !body.dryRun) {
+    if (refresh !== 'none' && !body.dryRun) {
       if (fs.existsSync(SHOWCASE_COOKIE_FILE)) {
-        steps.push({
-          step: 'profiles',
-          ...(await runNodeScript(
-            [
-              path.join(PROJECT_ROOT, 'tools', 'fetch-profiles.mjs'),
-              '--cookie-file',
-              SHOWCASE_COOKIE_FILE,
-              '--authors',
-              '--delay',
-              '400',
-            ],
-            540000
-          )),
-        });
+        const profileArgs = [
+          path.join(PROJECT_ROOT, 'tools', 'fetch-profiles.mjs'),
+          '--cookie-file',
+          SHOWCASE_COOKIE_FILE,
+          '--authors',
+          '--delay',
+          '400',
+        ];
+        // full：重新拉取所有资料并覆盖头像；incremental：只补缺失/过期的
+        if (refresh === 'full') profileArgs.push('--force');
+        steps.push({ step: 'profiles', ...(await runNodeScript(profileArgs, 540000)) });
       } else {
         steps.push({
           step: 'profiles',
@@ -817,7 +819,7 @@ async function hShowcasePublish(ctx) {
   } finally {
     showcasePublishing = false;
   }
-  return { steps };
+  return { steps, refresh, mode };
 }
 
 async function hExport(ctx) {

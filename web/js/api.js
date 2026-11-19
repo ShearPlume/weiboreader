@@ -50,6 +50,7 @@ export const ERR_TEXT = {
  * 仅用于把 `/api/*`、`/reports/*` 这类站内绝对路径挂到子路径下。
  */
 const API_BASE = (() => {
+  if (typeof window === 'undefined') return '/';
   const { pathname } = window.location;
   if (pathname.endsWith('/')) return pathname;
   if (/\.[a-z0-9]+$/i.test(pathname)) return pathname.replace(/[^/]*$/, '');
@@ -81,10 +82,23 @@ export async function api(pathname, options = {}) {
     ? `${API_BASE}api/${String(pathname).slice('/api/'.length)}`
     : pathname;
   let response;
-  try {
-    response = await fetch(target, init);
-  } catch {
-    throw new ApiError('NETWORK', '无法连接本地服务，请确认终端里的 node 进程仍在运行', 0);
+  // 跨海链路偶发 reset / Basic Auth 首次并行请求 401：GET 重试一次；
+  // 401 在服务端尚未执行，任何方法都可安全重试一次。
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      response = await fetch(target, init);
+    } catch {
+      if (attempt === 0 && method === 'GET') {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        continue;
+      }
+      throw new ApiError('NETWORK', '无法连接本地服务，请确认终端里的 node 进程仍在运行', 0);
+    }
+    if (response.status === 401 && attempt === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      continue;
+    }
+    break;
   }
   let text = '';
   try {

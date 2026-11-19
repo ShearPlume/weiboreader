@@ -20,25 +20,28 @@ import {
   refreshStatus,
   toast,
 } from './api.js';
-import * as library from './views-library.js';
-import * as fetchView from './views-fetch.js';
-import * as searchView from './views-search.js';
-import * as configView from './views-config.js';
-import * as showcaseView from './views-showcase.js';
 
-/** 视图注册表：`re` 捕获组会作为 `ctx.params` 传给视图。 */
+/** 视图注册表：按路由懒加载，避免首屏一次性下载所有页面。
+ *  `re` 捕获组会作为 `ctx.params` 传给视图；`fn` 是模块内的渲染函数名。
+ */
 const ROUTES = [
-  { re: /^\/overview$/, nav: 'overview', render: library.renderOverview },
-  { re: /^\/users$/, nav: 'users', render: library.renderUsers },
-  { re: /^\/users\/(\d{1,20})$/, nav: 'users', render: library.renderUserDetail },
-  { re: /^\/posts$/, nav: 'posts', render: library.renderPosts },
-  { re: /^\/posts\/(\d{1,20})$/, nav: 'posts', render: library.renderPostDetail },
-  { re: /^\/fetch$/, nav: 'fetch', render: fetchView.renderFetch },
-  { re: /^\/search$/, nav: 'search', render: searchView.renderSearch },
-  { re: /^\/showcase$/, nav: 'showcase', render: showcaseView.renderShowcase },
-  { re: /^\/subscriptions$/, nav: 'settings', render: configView.renderSubscriptions },
-  { re: /^\/settings$/, nav: 'settings', render: configView.renderSettings },
+  { re: /^\/overview$/, nav: 'overview', load: () => import('./views-library.js'), fn: 'renderOverview' },
+  { re: /^\/users$/, nav: 'users', load: () => import('./views-library.js'), fn: 'renderUsers' },
+  { re: /^\/users\/(\d{1,20})$/, nav: 'users', load: () => import('./views-library.js'), fn: 'renderUserDetail' },
+  { re: /^\/posts$/, nav: 'posts', load: () => import('./views-library.js'), fn: 'renderPosts' },
+  { re: /^\/posts\/(\d{1,20})$/, nav: 'posts', load: () => import('./views-library.js'), fn: 'renderPostDetail' },
+  { re: /^\/fetch$/, nav: 'fetch', load: () => import('./views-fetch.js'), fn: 'renderFetch' },
+  { re: /^\/search$/, nav: 'search', load: () => import('./views-search.js'), fn: 'renderSearch' },
+  { re: /^\/showcase$/, nav: 'showcase', load: () => import('./views-showcase.js'), fn: 'renderShowcase' },
+  { re: /^\/subscriptions$/, nav: 'settings', load: () => import('./views-config.js'), fn: 'renderSubscriptions' },
+  { re: /^\/settings$/, nav: 'settings', load: () => import('./views-config.js'), fn: 'renderSettings' },
 ];
+
+/** 登录弹窗所属视图按需加载（顶栏按钮不需要首屏加载整个设置页）。 */
+async function openLoginModal() {
+  const mod = await import('./views-config.js');
+  mod.openLoginModal();
+}
 
 /** 顶栏余额 chip 元素。 */
 const els = {};
@@ -128,7 +131,7 @@ function bindBanner() {
     if (!target) return;
     const act = target.dataset.act;
     if (act === 'login') {
-      configView.openLoginModal();
+      void openLoginModal();
       return;
     }
     if (act === 'seed') {
@@ -190,7 +193,11 @@ async function renderRoute() {
   const token = renderToken;
   clearNode(root);
   try {
-    await matched.render(root, { params, query, pathname });
+    const module = await matched.load();
+    if (token !== renderToken) return;
+    const render = module[matched.fn];
+    if (typeof render !== 'function') throw new Error(`视图 ${matched.fn} 未定义`);
+    await render(root, { params, query, pathname });
   } catch (err) {
     if (token !== renderToken) return;
     clearNode(root);
@@ -215,7 +222,9 @@ function init() {
   els.brandVer = document.getElementById('brandVer');
   els.dataDir = document.getElementById('dataDirHint');
 
-  els.login.addEventListener('click', () => configView.openLoginModal());
+  els.login.addEventListener('click', () => {
+    void openLoginModal();
+  });
   els.refresh.addEventListener('click', () => {
     void refreshBalance();
   });

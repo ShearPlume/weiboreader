@@ -172,10 +172,10 @@ function existingAvatar(uid) {
  * 下载头像到 data/avatars/<uid>.<ext>。
  * 微博图片 CDN 要求 Referer 为 weibo.com，浏览器直连会 403，因此必须由本机预取。
  */
-async function downloadAvatar(uid, url) {
+async function downloadAvatar(uid, url, force = false) {
   if (!url) return '';
   const cached = existingAvatar(uid);
-  if (cached) return cached;
+  if (cached && !force) return cached;
   const response = await fetch(url, {
     headers: { 'User-Agent': DESKTOP_UA, Referer: 'https://weibo.com/' },
   });
@@ -186,6 +186,13 @@ async function downloadAvatar(uid, url) {
   fs.mkdirSync(AVATAR_DIR, { recursive: true });
   const file = path.join(AVATAR_DIR, `${uid}${ext}`);
   fs.writeFileSync(file, buffer);
+  if (force) {
+    // 换过头像时扩展名可能变化，清掉旧文件避免同名多份
+    for (const other of AVATAR_EXTS) {
+      const candidate = path.join(AVATAR_DIR, `${uid}${other}`);
+      if (candidate !== file && fs.existsSync(candidate)) fs.unlinkSync(candidate);
+    }
+  }
   return file;
 }
 
@@ -205,7 +212,7 @@ async function main() {
         continue;
       }
       try {
-        await downloadAvatar(profile.uid, profile.avatarUrl);
+        await downloadAvatar(profile.uid, profile.avatarUrl, opts.force);
         done += 1;
         console.log(`[${index + 1}/${entries.length}] ${profile.uid} 头像 ✓`);
       } catch (err) {
@@ -246,7 +253,7 @@ async function main() {
       saveDoc(doc);
       done += 1;
       try {
-        await downloadAvatar(uid, result.profile.avatarUrl);
+        await downloadAvatar(uid, result.profile.avatarUrl, opts.force);
       } catch (err) {
         console.warn(`[${index + 1}/${uids.length}] ${uid} 头像下载失败：${err instanceof Error ? err.message : err}`);
       }
