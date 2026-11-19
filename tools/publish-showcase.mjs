@@ -45,6 +45,7 @@ function parseArgs(argv) {
     region: process.env.COS_REGION || DEFAULT_REGION,
     prefix: DEFAULT_PREFIX,
     cdnBase: process.env.SHOWCASE_CDN_BASE || '',
+    siteBase: process.env.SHOWCASE_SITE_BASE || 'https://idolgallery.xyz/fakeaccount/',
     mode: 'all',
     uid: '',
     force: false,
@@ -59,6 +60,7 @@ function parseArgs(argv) {
     else if (arg === '--region') opts.region = String(argv[(i += 1)] || '');
     else if (arg === '--prefix') opts.prefix = String(argv[(i += 1)] || '');
     else if (arg === '--cdn-base') opts.cdnBase = String(argv[(i += 1)] || '');
+    else if (arg === '--site-base') opts.siteBase = String(argv[(i += 1)] || '');
     else if (arg === '--mode') opts.mode = String(argv[(i += 1)] || 'all');
     else if (arg === '--uid') opts.uid = String(argv[(i += 1)] || '').trim();
     else if (arg === '--data-dir') opts.dataDir = path.resolve(String(argv[(i += 1)] || ''));
@@ -69,6 +71,7 @@ function parseArgs(argv) {
   if (opts.prefix && !opts.prefix.endsWith('/')) opts.prefix += '/';
   if (!opts.cdnBase) opts.cdnBase = `https://${opts.bucket}.cos.${opts.region}.myqcloud.com/`;
   if (!opts.cdnBase.endsWith('/')) opts.cdnBase += '/';
+  if (!opts.siteBase.endsWith('/')) opts.siteBase += '/';
   opts.staticRoot = opts.cdnBase + opts.prefix;
   return opts;
 }
@@ -244,10 +247,10 @@ function buildIndexHtml(opts, stamp) {
     .replace('href="css/showcase.css"', `href="css/showcase.css?v=${stamp}"`)
     .replace('src="js/showcase.js"', `src="js/showcase.js?v=${stamp}"`);
   html = html.replace('<head>', `<head>\n<base href="${opts.staticRoot}">`);
-  // manifest 必须与页面同源（PWA 的 start_url/scope 才能落在 idolgallery 域名下）
+  // manifest / 主屏图标必须用站点绝对地址，不能落到 COS 域名（否则 API 会跨域/404）
   html = html
-    .replace('href="manifest.webmanifest"', `href="/${opts.prefix}manifest.webmanifest"`)
-    .replace('href="icons/icon-180.png"', `href="/${opts.prefix}icons/fake-weibo-180.png"`);
+    .replace('href="manifest.webmanifest"', `href="${opts.siteBase}manifest.webmanifest"`)
+    .replace('href="icons/fake-weibo-180.png"', `href="${opts.siteBase}icons/fake-weibo-180.png"`);
   return html;
 }
 

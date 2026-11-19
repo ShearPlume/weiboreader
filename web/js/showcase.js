@@ -21,6 +21,14 @@ const BASE = (() => {
 })();
 const IS_DEPLOYED = BASE !== '/';
 
+// <base> 指向 COS 时，root-relative 的 /api 也会解析到 COS；API 必须显式使用站点 origin。
+const API_ROOT = `${window.location.origin}${BASE}`;
+
+// 通过 COS 直链打开的旧主屏图标：跳回站点，避免校验/API 跨域或 404。
+if (/\.myqcloud\.com$/i.test(window.location.hostname)) {
+  window.location.replace(`https://idolgallery.xyz/fakeaccount/${window.location.hash}`);
+}
+
 /** 静态资源根：线上由 <base> 指向 COS 广州，本地退回同源。 */
 const STATIC_BASE = new URL('.', document.baseURI);
 const USE_STATIC = IS_DEPLOYED || STATIC_BASE.origin !== window.location.origin;
@@ -145,7 +153,7 @@ let tipTimer = null;
 async function loadUsers() {
   const staticDoc = await fetchStatic('users.json');
   if (staticDoc && Array.isArray(staticDoc.items)) return staticDoc.items;
-  const data = await api(`${BASE}api/users`);
+  const data = await api(`${API_ROOT}api/users`);
   return Array.isArray(data && data.items) ? data.items : [];
 }
 
@@ -154,7 +162,7 @@ async function loadProfiles() {
   const staticDoc = await fetchStatic('profiles.json');
   if (staticDoc && staticDoc.items && typeof staticDoc.items === 'object') return staticDoc.items;
   try {
-    const data = await api(`${BASE}api/profiles`);
+    const data = await api(`${API_ROOT}api/profiles`);
     return data && data.items && typeof data.items === 'object' ? data.items : {};
   } catch {
     return {};
@@ -165,7 +173,7 @@ async function loadProfiles() {
 function records(uid, mode) {
   const key = `${uid}:${mode}`;
   if (!state.cache.has(key)) {
-    const apiUrl = `${BASE}api/owners/users/${encodeURIComponent(uid)}/records?mode=${encodeURIComponent(mode)}&pageSize=${PAGE_SIZE}`;
+    const apiUrl = `${API_ROOT}api/owners/users/${encodeURIComponent(uid)}/records?mode=${encodeURIComponent(mode)}&pageSize=${PAGE_SIZE}`;
     const pending = (async () => {
       const staticDoc = await fetchStatic(`records/${encodeURIComponent(uid)}/${encodeURIComponent(mode)}.json`);
       if (staticDoc && Array.isArray(staticDoc.items)) return staticDoc;
@@ -194,7 +202,7 @@ async function itemsOf(uid, mode) {
 async function unreadTotal(uid, mode) {
   const doc = await records(uid, mode);
   if (doc && doc.unread !== undefined && Number.isFinite(Number(doc.unread))) return Number(doc.unread);
-  const url = `${BASE}api/owners/users/${encodeURIComponent(uid)}/records?mode=${encodeURIComponent(mode)}&unread=1&pageSize=1`;
+  const url = `${API_ROOT}api/owners/users/${encodeURIComponent(uid)}/records?mode=${encodeURIComponent(mode)}&unread=1&pageSize=1`;
   const data = await api(url);
   return Number(data && data.total) || 0;
 }
@@ -983,7 +991,7 @@ function hideGate() {
 
 async function verifyInvite(code) {
   try {
-    const response = await fetch(`${BASE}api/showcase/invite/verify`, {
+    const response = await fetch(`${API_ROOT}api/showcase/invite/verify`, {
       cache: 'no-store',
       headers: { 'X-Invite-Code': code },
     });

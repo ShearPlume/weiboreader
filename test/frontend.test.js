@@ -148,7 +148,7 @@ test('index.html 引用的静态资源都存在，且除充值入口外无外链
 });
 
 test('前端源码不得引用外部 CDN/字体（PRD §6 无外链要求）', () => {
-  const allowed = /https?:\/\/(?:weibo\.com|m\.weibo\.cn|wx\d\.sinaimg\.cn|127\.0\.0\.1|localhost)/i;
+  const allowed = /https?:\/\/(?:weibo\.com|m\.weibo\.cn|wx\d\.sinaimg\.cn|idolgallery\.xyz|idolgallary\.xyz|127\.0\.0\.1|localhost)/i;
   for (const mod of modules) {
     for (const [index, line] of mod.src.split('\n').entries()) {
       const urls = line.match(/https?:\/\/[^\s'"`)<>]+/gi) || [];
