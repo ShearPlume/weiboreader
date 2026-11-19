@@ -1116,9 +1116,21 @@ async function boot() {
   syncAppHeight();
   window.addEventListener('resize', syncAppHeight);
   window.addEventListener('orientationchange', syncAppHeight);
-  window.addEventListener('pageshow', syncAppHeight);
+  window.addEventListener('pageshow', () => {
+    syncAppHeight();
+    window.setTimeout(() => {
+      void document.documentElement.offsetHeight;
+      syncAppHeight();
+    }, 300);
+  });
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) syncAppHeight();
+    if (!document.hidden) {
+      syncAppHeight();
+      window.setTimeout(() => {
+        void document.documentElement.offsetHeight;
+        syncAppHeight();
+      }, 300);
+    }
   });
   if (window.visualViewport) window.visualViewport.addEventListener('resize', syncAppHeight);
 
