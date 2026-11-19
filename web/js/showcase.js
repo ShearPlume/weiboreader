@@ -261,11 +261,16 @@ function profileHref(uid) {
   return /^\d{1,20}$/.test(value) ? `https://m.weibo.cn/u/${value}` : '';
 }
 
-/** 记录对应的原微博：App 里定位已删除/隐藏评论会空白，统一打开原微博。 */
+/** 记录对应的原微博/评论：顶层评论用 sourceId，回复用 rootId 定位到所在评论线程。 */
 function recordHref(record) {
   const postId = String(record.postId || '');
-  if (postId) return `https://m.weibo.cn/detail/${postId}`;
-  return String(record.postUrl || '');
+  if (!postId) return String(record.postUrl || '');
+  const isStatus = record.mode === 'mentions-posts' || record.mode === 'user-posts';
+  if (isStatus) return `https://m.weibo.cn/detail/${postId}`;
+  const cid = String(record.rootId || record.sourceId || '');
+  return /^\d{1,20}$/.test(cid)
+    ? `https://m.weibo.cn/detail/${postId}?cid=${cid}`
+    : `https://m.weibo.cn/detail/${postId}`;
 }
 
 /** 头像外层加主页链接；没有 UID 时退回纯头像。 */

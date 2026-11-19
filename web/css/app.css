@@ -1504,3 +1504,27 @@ table.data tr:hover td {
     font-size: 16px;
   }
 }
+
+@media (max-width: 860px) {
+  .card {
+    padding: 10px 12px;
+  }
+
+  .form-row {
+    gap: 6px;
+  }
+
+  .field {
+    gap: 3px;
+  }
+
+  .field > label,
+  .field-label {
+    font-size: 11.5px;
+  }
+
+  .form-hint {
+    margin-top: 0;
+    line-height: 1.45;
+  }
+}
