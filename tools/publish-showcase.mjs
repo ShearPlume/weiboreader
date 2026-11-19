@@ -250,7 +250,7 @@ function buildIndexHtml(opts, stamp) {
   // manifest / 主屏图标必须用站点绝对地址，不能落到 COS 域名（否则 API 会跨域/404）
   html = html
     .replace('href="manifest.webmanifest"', `href="${opts.siteBase}manifest.webmanifest"`)
-    .replace('href="icons/fake-weibo-180.png"', `href="${opts.siteBase}icons/fake-weibo-180.png"`);
+    .replace('href="icons/fake-weibo-180.png"', `href="${opts.staticRoot}icons/fake-weibo-180.png"`);
   return html;
 }
 
@@ -306,8 +306,8 @@ async function main() {
       background_color: '#ffffff',
       theme_color: '#ffffff',
       icons: [
-        { src: 'icons/fake-weibo-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-        { src: 'icons/fake-weibo-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+        { src: `${opts.staticRoot}icons/fake-weibo-192.png`, sizes: '192x192', type: 'image/png', purpose: 'any' },
+        { src: `${opts.staticRoot}icons/fake-weibo-512.png`, sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
       ],
     };
     assets.push([
