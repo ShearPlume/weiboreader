@@ -623,6 +623,7 @@ a.card-text {
 
 .act {
   display: inline-flex;
+  text-decoration: none;
   align-items: center;
   gap: 4px;
   height: 30px;

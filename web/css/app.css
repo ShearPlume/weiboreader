@@ -1528,3 +1528,17 @@ table.data tr:hover td {
     line-height: 1.45;
   }
 }
+
+@media (max-width: 860px) {
+  /* 覆盖行内 flex:1 1 xxx，避免竖排表单被撑出大段空白 */
+  .form-row > .field,
+  .form-row > .field.w-sm,
+  .form-row > .field.w-md {
+    flex: 0 0 auto !important;
+    width: 100%;
+  }
+
+  .card {
+    margin-bottom: 10px;
+  }
+}

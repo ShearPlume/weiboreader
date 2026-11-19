@@ -249,6 +249,16 @@ function init() {
 
 init();
 
+/** 空闲时预取所有视图模块，避免首次点页签时再跨海下载 20~60KB。 */
+function prefetchViews() {
+  for (const route of ROUTES) route.load().catch(() => {});
+}
+if ('requestIdleCallback' in window) {
+  window.requestIdleCallback(prefetchViews, { timeout: 2500 });
+} else {
+  window.setTimeout(prefetchViews, 1500);
+}
+
 /** 供视图调用的轻量再渲染（不改变路由）。 */
 export function rerender() {
   void renderRoute();

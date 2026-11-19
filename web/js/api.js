@@ -64,6 +64,11 @@ export function assetUrl(pathname) {
   return API_BASE.replace(/\/$/, '') + value;
 }
 
+/** 列表类 GET 的短缓存：3 秒内重复切换页签不再跨海请求。 */
+const GET_CACHE_TTL_MS = 3000;
+const getCache = new Map();
+const CACHEABLE_GET = /\/api\/(users|posts|subscriptions|status|settings|pricing)(\?|$)/;
+
 /**
  * 调用本地 API（统一 `{ok,data}` 包裹）。
  * 传入 `/api/...` 时会自动加部署前缀；展示页传入的完整路径不受影响。
@@ -81,6 +86,13 @@ export async function api(pathname, options = {}) {
   const target = String(pathname).startsWith('/api/')
     ? `${API_BASE}api/${String(pathname).slice('/api/'.length)}`
     : pathname;
+  const isGet = method === 'GET';
+  const cacheable =
+    isGet && CACHEABLE_GET.test(target) && !/[?&]refresh=1/.test(target) && options.cache !== false;
+  if (cacheable) {
+    const hit = getCache.get(target);
+    if (hit && Date.now() - hit.at < GET_CACHE_TTL_MS) return hit.data;
+  }
   let response;
   // 跨海链路偶发 reset / Basic Auth 首次并行请求 401：GET 重试一次；
   // 401 在服务端尚未执行，任何方法都可安全重试一次。
@@ -121,6 +133,8 @@ export async function api(pathname, options = {}) {
       error.message || ERR_TEXT[code] || `请求失败（HTTP ${response.status}），请稍后重试`;
     throw new ApiError(code, message, response.status, error.details);
   }
+  if (cacheable) getCache.set(target, { at: Date.now(), data: payload.data });
+  else if (!isGet) getCache.clear();
   return payload.data;
 }
 

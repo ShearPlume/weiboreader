@@ -261,6 +261,12 @@ function profileHref(uid) {
   return /^\d{1,20}$/.test(value) ? `https://m.weibo.cn/u/${value}` : '';
 }
 
+/** 原微博链接（不带 cid），作为评论被删/隐藏时的兜底入口。 */
+function recordPostHref(record) {
+  const postId = String(record.postId || '');
+  return postId ? `https://m.weibo.cn/detail/${postId}` : String(record.postUrl || '');
+}
+
 /** 记录对应的原微博/评论：顶层评论用 sourceId，回复用 rootId 定位到所在评论线程。 */
 function recordHref(record) {
   const postId = String(record.postId || '');
@@ -545,6 +551,10 @@ function cardHtml(rec, kind) {
   const media = mediaHtml(rec);
   const likes = Number(rec.likes) > 0 ? ` ${Number(rec.likes)}` : '';
   const linkAttrs = externalLinkAttrs(recordHref(rec));
+  const postHref = recordPostHref(rec);
+  const isComment = rec.mode !== 'mentions-posts' && rec.mode !== 'user-posts';
+  const postLink =
+    isComment && postHref ? `<a class="act" ${externalLinkAttrs(postHref)}>原微博</a>` : '';
   return `<article class="card">
     ${avatarLink(rec.authorUid, avatarHtml(name, rec.authorUid || name, 44))}
     <div class="card-main">
@@ -558,6 +568,7 @@ function cardHtml(rec, kind) {
         <button class="act" type="button" data-demo>${ICON.forward}转发</button>
         <button class="act" type="button" data-demo>${ICON.reply}回复</button>
         <button class="act" type="button" data-demo>${ICON.thumb}赞${likes}</button>
+        ${postLink}
         <button class="act-dots" type="button" data-demo aria-label="更多">⋯</button>
       </div>
     </div>
