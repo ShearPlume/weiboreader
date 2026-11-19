@@ -33,6 +33,7 @@ const ROUTES = [
   { re: /^\/fetch$/, nav: 'fetch', load: () => import('./views-fetch.js'), fn: 'renderFetch' },
   { re: /^\/search$/, nav: 'search', load: () => import('./views-search.js'), fn: 'renderSearch' },
   { re: /^\/showcase$/, nav: 'showcase', load: () => import('./views-showcase.js'), fn: 'renderShowcase' },
+  { re: /^\/invites$/, nav: 'invites', load: () => import('./views-invites.js'), fn: 'renderInvites' },
   { re: /^\/subscriptions$/, nav: 'settings', load: () => import('./views-config.js'), fn: 'renderSubscriptions' },
   { re: /^\/settings$/, nav: 'settings', load: () => import('./views-config.js'), fn: 'renderSettings' },
 ];

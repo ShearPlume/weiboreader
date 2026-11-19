@@ -253,27 +253,9 @@ function profileHref(uid) {
   return /^\d{1,20}$/.test(value) ? `https://m.weibo.cn/u/${value}` : '';
 }
 
-/** 评论精确定位（?cid=）只对近期记录使用；更早的评论可能已删除，直接打开原微博避免空白。 */
-const COMMENT_CID_MAX_AGE_MS = 60 * 24 * 60 * 60 * 1000;
-
-/**
- * 记录对应的原微博/评论。
- * 微博 `?cid=` 只对顶层评论可靠：回复/已删除评论会打开空白页。
- * 因此只有「近期 + 顶层评论（sourceId == rootId）」精确定位，其余直接打开原微博。
- */
+/** 记录对应的原微博：App 里定位已删除/隐藏评论会空白，统一打开原微博。 */
 function recordHref(record) {
   const postId = String(record.postId || '');
-  const sourceId = String(record.sourceId || '');
-  const rootId = String(record.rootId || '');
-  const isStatus = record.mode === 'mentions-posts' || record.mode === 'user-posts';
-  if (isStatus) {
-    return postId ? `https://m.weibo.cn/detail/${postId}` : String(record.postUrl || '');
-  }
-  const fresh = Number(record.ms) > 0 && Date.now() - Number(record.ms) <= COMMENT_CID_MAX_AGE_MS;
-  const topLevel = Boolean(rootId) && rootId === sourceId;
-  if (postId && topLevel && fresh && /^\d{1,20}$/.test(sourceId)) {
-    return `https://m.weibo.cn/detail/${postId}?cid=${sourceId}`;
-  }
   if (postId) return `https://m.weibo.cn/detail/${postId}`;
   return String(record.postUrl || '');
 }
@@ -842,17 +824,34 @@ function setScreen(markup) {
   el.screen.scrollTop = 0;
 }
 
+const ROUTE_DEPTH = { messages: 0, me: 0, home: 0, video: 0, discover: 0, likes: 1, at: 1, comments: 1 };
+
+function animateScreen(direction) {
+  el.screen.classList.remove('anim-forward', 'anim-back');
+  void el.screen.offsetWidth;
+  el.screen.classList.add(direction === 'forward' ? 'anim-forward' : 'anim-back');
+}
+
 function render() {
-  state.route = currentRoute();
+  const next = currentRoute();
+  const previous = state.route;
+  const prevDepth = ROUTE_DEPTH[previous] ?? 0;
+  const nextDepth = ROUTE_DEPTH[next] ?? 0;
+  let direction = '';
+  if (next !== previous) {
+    direction = nextDepth > prevDepth ? 'forward' : nextDepth < prevDepth ? 'back' : '';
+  }
+  state.route = next;
   renderNavbar();
   renderTabbar();
   renderOverlay();
-  renderScreen();
+  renderScreen(direction);
 }
 
-async function renderScreen() {
+async function renderScreen(direction = '') {
   const seq = ++state.seq;
   el.screen.classList.toggle('screen-me', state.route === 'me');
+  if (direction) animateScreen(direction);
   if (!state.uid) {
     setScreen(noUsersHtml());
     return;
@@ -970,6 +969,94 @@ function syncAppHeight() {
   if (height > 0) document.documentElement.style.setProperty('--app-height', `${height}px`);
 }
 
+const INVITE_KEY = 'weibo-showcase-invite-v1';
+
+function showGate(message = '') {
+  if (!el.gate) return;
+  el.gate.hidden = false;
+  if (el.gateMsg) el.gateMsg.textContent = message;
+}
+
+function hideGate() {
+  if (el.gate) el.gate.hidden = true;
+}
+
+async function verifyInvite(code) {
+  try {
+    const response = await fetch(`${BASE}api/showcase/invite/verify`, {
+      cache: 'no-store',
+      headers: { 'X-Invite-Code': code },
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      const message =
+        payload && payload.error && payload.error.message ? payload.error.message : '验证服务暂时不可用';
+      return { ok: false, reason: message, network: response.status >= 500 };
+    }
+    if (!payload || payload.ok !== true) return { ok: false, reason: '验证服务返回异常', network: true };
+    if (payload.data && payload.data.valid) return { ok: true };
+    return { ok: false, reason: (payload.data && payload.data.reason) || '邀请码无效' };
+  } catch {
+    return { ok: false, reason: '验证服务暂时不可用，请稍后再试', network: true };
+  }
+}
+
+async function requireInvite() {
+  let stored = '';
+  try {
+    stored = localStorage.getItem(INVITE_KEY) || '';
+  } catch {
+    stored = '';
+  }
+  let initialMessage = '';
+  if (stored) {
+    const result = await verifyInvite(stored);
+    if (result.ok) {
+      hideGate();
+      return true;
+    }
+    initialMessage = result.reason || '';
+    if (!result.network) {
+      try {
+        localStorage.removeItem(INVITE_KEY);
+      } catch {
+        /* 隐私模式下忽略 */
+      }
+    }
+  }
+  if (!el.gate || !el.gateBtn || !el.gateInput) return true;
+  showGate(initialMessage);
+  return new Promise((resolve) => {
+    const submit = async () => {
+      const code = el.gateInput.value.trim();
+      if (!code) {
+        el.gateMsg.textContent = '请输入邀请码';
+        return;
+      }
+      el.gateBtn.disabled = true;
+      el.gateMsg.textContent = '验证中…';
+      const result = await verifyInvite(code);
+      if (result.ok) {
+        try {
+          localStorage.setItem(INVITE_KEY, code);
+        } catch {
+          /* 隐私模式下本次仍可访问 */
+        }
+        hideGate();
+        resolve(true);
+        return;
+      }
+      el.gateMsg.textContent = result.reason || '邀请码无效';
+      el.gateBtn.disabled = false;
+      el.gateInput.focus();
+    };
+    el.gateBtn.addEventListener('click', submit);
+    el.gateInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') submit();
+    });
+  });
+}
+
 /* ------------------------------------------------------------------ *
  * 启动
  * ------------------------------------------------------------------ */
@@ -988,6 +1075,10 @@ async function boot() {
     });
     document.addEventListener('fullscreenchange', updateFullscreenUi);
   }
+  el.gate = document.getElementById('gate');
+  el.gateInput = document.getElementById('gateInput');
+  el.gateBtn = document.getElementById('gateBtn');
+  el.gateMsg = document.getElementById('gateMsg');
 
   tickClock();
   setInterval(tickClock, 30000);
@@ -1006,6 +1097,9 @@ async function boot() {
     if (!document.hidden) syncAppHeight();
   });
   if (window.visualViewport) window.visualViewport.addEventListener('resize', syncAppHeight);
+
+  const allowed = await requireInvite();
+  if (!allowed) return;
 
   try {
     const [users, profiles] = await Promise.all([loadUsers(), loadProfiles()]);

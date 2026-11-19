@@ -29,6 +29,7 @@ import * as exchange from './exchange.js';
 import * as demo from './demo.js';
 import * as scheduler from './scheduler.js';
 import * as profiles from './profiles.js';
+import * as invites from './invites.js';
 
 /** AppError 透出（各模块统一从这里取类型可以少一条 import）。 */
 export { AppError };
@@ -822,6 +823,55 @@ async function hShowcasePublish(ctx) {
   return { steps, refresh, mode };
 }
 
+/* --- 邀请码 --- */
+
+const inviteAttempts = new Map();
+
+function inviteRateLimited(ip) {
+  const now = Date.now();
+  let entry = inviteAttempts.get(ip);
+  if (!entry || now > entry.reset) {
+    entry = { count: 0, reset: now + 60000 };
+    inviteAttempts.set(ip, entry);
+  }
+  entry.count += 1;
+  if (inviteAttempts.size > 2000) {
+    for (const [key, value] of inviteAttempts) {
+      if (now > value.reset) inviteAttempts.delete(key);
+    }
+  }
+  return entry.count > 30;
+}
+
+async function hInvitesList() {
+  return { items: invites.list() };
+}
+
+async function hInviteCreate(ctx) {
+  const body = ctx.body || {};
+  return { invite: invites.create({ note: body.note, expiresInDays: body.expiresInDays }) };
+}
+
+async function hInvitePatch(ctx) {
+  const body = ctx.body || {};
+  const invite = invites.setEnabled(ctx.params[0], body.enabled);
+  if (!invite) throw new AppError('NOT_FOUND', '邀请码不存在', 404);
+  return { invite };
+}
+
+async function hInviteDelete(ctx) {
+  if (!invites.remove(ctx.params[0])) throw new AppError('NOT_FOUND', '邀请码不存在', 404);
+  return { deleted: true };
+}
+
+async function hInviteVerify(ctx) {
+  const ip = (ctx.req.socket && ctx.req.socket.remoteAddress) || 'unknown';
+  if (inviteRateLimited(ip)) throw new AppError('RATE_LIMITED', '尝试过于频繁，请稍后再试', 429);
+  const header = ctx.req.headers['x-invite-code'];
+  const code = String(header || ctx.query.get('code') || '');
+  return invites.verify(code);
+}
+
 async function hExport(ctx) {
   const payload = exchange.buildExport();
   const body = JSON.stringify(payload, null, 2);
@@ -909,6 +959,11 @@ const ROUTES = [
   ['GET', /^\/api\/profiles$/, hProfiles],
   ['GET', /^\/api\/showcase\/status$/, hShowcaseStatus],
   ['POST', /^\/api\/showcase\/publish$/, hShowcasePublish],
+  ['GET', /^\/api\/showcase\/invite\/verify$/, hInviteVerify],
+  ['GET', /^\/api\/invites$/, hInvitesList],
+  ['POST', /^\/api\/invites$/, hInviteCreate],
+  ['PATCH', /^\/api\/invites\/([^/]+)$/, hInvitePatch],
+  ['DELETE', /^\/api\/invites\/([^/]+)$/, hInviteDelete],
 
   ['GET', /^\/api\/exchange\/export$/, hExport],
   ['POST', /^\/api\/exchange\/import$/, hImport],

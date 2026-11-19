@@ -247,7 +247,7 @@ function buildIndexHtml(opts, stamp) {
   // manifest 必须与页面同源（PWA 的 start_url/scope 才能落在 idolgallery 域名下）
   html = html
     .replace('href="manifest.webmanifest"', `href="/${opts.prefix}manifest.webmanifest"`)
-    .replace('href="icons/icon-180.png"', `href="/${opts.prefix}icons/icon-180.png"`);
+    .replace('href="icons/icon-180.png"', `href="/${opts.prefix}icons/fake-weibo-180.png"`);
   return html;
 }
 
@@ -303,8 +303,8 @@ async function main() {
       background_color: '#ffffff',
       theme_color: '#ffffff',
       icons: [
-        { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-        { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+        { src: 'icons/fake-weibo-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+        { src: 'icons/fake-weibo-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
       ],
     };
     assets.push([
@@ -313,7 +313,7 @@ async function main() {
       'application/manifest+json',
       'no-cache',
     ]);
-    for (const icon of ['icon-180.png', 'icon-192.png', 'icon-512.png']) {
+    for (const icon of ['fake-weibo-180.png', 'fake-weibo-192.png', 'fake-weibo-512.png']) {
       const iconFile = path.join(PROJECT_ROOT, 'web', 'icons', icon);
       if (fs.existsSync(iconFile)) {
         assets.push([`icons/${icon}`, fs.readFileSync(iconFile), 'image/png', 'public, max-age=31536000, immutable']);
