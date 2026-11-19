@@ -243,3 +243,6 @@ curl -sS https://mirugumi-space-1382800327.cos.ap-guangzhou.myqcloud.com/fakeacc
   新增互动数据或头像后，仍在后台「展示页」点发布（或手动运行 `publish-showcase.mjs`）。
 - 回滚：把 `main` 回退到上一个提交后 push，流水线会自动重新部署；
   服务器代码与静态资源都会回到该提交对应的状态。
+
+- 不需要额外配置第三方 action：工作流只使用 `actions/checkout`、`actions/setup-node` 和系统 `ssh`。
+- 仓库若关闭了 Actions（Settings → Actions → General），需要允许 Actions 运行；Secrets 已通过 API 配置好。

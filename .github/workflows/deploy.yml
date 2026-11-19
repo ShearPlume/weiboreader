@@ -7,7 +7,7 @@ on:
 
 concurrency:
   group: deploy-production
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   test:
@@ -23,33 +23,47 @@ jobs:
   deploy:
     needs: test
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - name: Deploy to server
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          port: 22
-          script_stop: true
-          command_timeout: 15m
-          script: |
-            set -e
-            cd /home/admin/weibo-reader-web
-            git fetch origin
-            git reset --hard origin/main
+      - name: Deploy over SSH
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+        run: |
+          set -e
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 \
+            "$SSH_USER@$SSH_HOST" "bash -s" <<'REMOTE'
+          set -e
+          cd /home/admin/weibo-reader-web
+          git fetch origin
+          git reset --hard origin/main
 
-            export PATH=/root/.nvm/versions/node/v22.23.1/bin:$PATH
-            export PM2_HOME=/home/admin/.pm2
+          export PATH=/root/.nvm/versions/node/v22.23.1/bin:$PATH
+          export PM2_HOME=/home/admin/.pm2
 
-            # 只发布前端静态资源到 COS；数据快照/头像请在后台「展示页」按需发布
-            node tools/publish-showcase.mjs --cos-conf /home/admin/.cos.conf --mode static
+          # 只发布前端静态资源到 COS；数据快照/头像请在后台「展示页」按需发布
+          node tools/publish-showcase.mjs --cos-conf /home/admin/.cos.conf --mode static
 
-            pm2 delete weibo-showcase >/dev/null 2>&1 || true
-            HOST=172.17.0.1 PORT=7788 NO_OPEN=1 \
-              SHOWCASE_COS_CONF=/home/admin/.cos.conf \
-              SHOWCASE_COOKIE_FILE=/home/admin/IdolGallary/backend/weibo_cookies.json \
-              pm2 start server/server.js --name weibo-showcase
-            pm2 save >/dev/null
+          pm2 delete weibo-showcase >/dev/null 2>&1 || true
+          HOST=172.17.0.1 PORT=7788 NO_OPEN=1 \
+            SHOWCASE_COS_CONF=/home/admin/.cos.conf \
+            SHOWCASE_COOKIE_FILE=/home/admin/IdolGallary/backend/weibo_cookies.json \
+            pm2 start server/server.js --name weibo-showcase
+          pm2 save >/dev/null
 
-            curl -fsS http://172.17.0.1:7788/api/health
+          curl -fsS http://172.17.0.1:7788/api/health
+          REMOTE
+
+      - name: Smoke test
+        run: |
+          set -e
+          curl -fsS -o /dev/null https://idolgallery.xyz/fakeaccount/
+          curl -fsS -o /dev/null https://idolgallery.xyz/fakeaccount/js/showcase.js
+          code=$(curl -s -o /dev/null -w '%{http_code}' https://idolgallery.xyz/fakeadmin/)
+          echo "fakeadmin status: $code"
+          [ "$code" = "401" ]
