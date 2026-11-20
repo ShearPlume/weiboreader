@@ -1730,10 +1730,7 @@ body.is-fullscreen .statusbar {
 /* 站内楼中楼页面 */
 .thread-root {
   position: absolute;
-  top: 32px;
-  right: 0;
-  bottom: 0;
-  left: 0;
+  inset: 0;
   z-index: 40;
   pointer-events: none;
 }
