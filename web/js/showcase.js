@@ -377,7 +377,7 @@ function renderNavbar() {
       <div class="me-nav-icons">
         <button class="me-nav-btn" type="button" data-demo aria-label="添加好友">${ICON.personAdd}<i class="me-nav-dot"></i></button>
         <button class="me-nav-btn" type="button" data-demo aria-label="扫一扫">${ICON.scan}</button>
-        <button class="me-nav-btn" type="button" data-demo aria-label="设置">${ICON.gear}<i class="me-nav-dot"></i></button>
+        <button class="me-nav-btn" type="button" data-invite-settings aria-label="设置">${ICON.gear}<i class="me-nav-dot"></i></button>
       </div>`;
     return;
   }
@@ -860,6 +860,7 @@ function animateScreen(direction) {
 }
 
 function render() {
+  closeInviteSettings();
   const next = currentRoute();
   const previous = state.route;
   const prevDepth = ROUTE_DEPTH[previous] ?? 0;
@@ -923,6 +924,23 @@ function onClick(event) {
   const target = event.target instanceof Element ? event.target : null;
   if (!target) return;
 
+  if (target.closest('[data-invite-settings]')) {
+    openInviteSettings();
+    return;
+  }
+  if (target.closest('[data-switch-invite]') || target.closest('[data-clear-invite]')) {
+    try {
+      localStorage.removeItem(INVITE_KEY);
+    } catch {
+      /* 隐私模式下忽略 */
+    }
+    window.location.reload();
+    return;
+  }
+  if (target.closest('[data-close-settings]') || target.hasAttribute('data-settings-mask')) {
+    closeInviteSettings();
+    return;
+  }
   if (target.closest('[data-demo]')) {
     tip('展示页面：不执行真实微博操作');
     return;
@@ -1094,6 +1112,37 @@ async function requireInvite() {
  * 启动
  * ------------------------------------------------------------------ */
 
+function closeInviteSettings() {
+  if (el.settingsRoot) el.settingsRoot.innerHTML = '';
+}
+
+function openInviteSettings() {
+  if (!el.settingsRoot) return;
+  let code = '';
+  try {
+    code = localStorage.getItem(INVITE_KEY) || '';
+  } catch {
+    code = '';
+  }
+  const invite = state.invite;
+  let scopeText = '全部账号';
+  if (invite && invite.scope === 'default') scopeText = '仅测试账号';
+  else if (invite && invite.scope === 'selected') scopeText = `指定 ${(invite.accounts || []).length} 个账号`;
+  el.settingsRoot.innerHTML = `
+    <div class="settings-mask" data-settings-mask>
+      <div class="settings-card">
+        <h3>邀请码设置</h3>
+        <p>当前邀请码<br><span class="settings-code">${esc(code || '未验证')}</span></p>
+        <p>可见范围：${esc(scopeText)}</p>
+        <div class="settings-actions">
+          <button class="settings-btn primary" type="button" data-switch-invite>切换邀请码</button>
+          <button class="settings-btn ghost" type="button" data-clear-invite>清除当前邀请码</button>
+        </div>
+        <button class="settings-close" type="button" data-close-settings>取消</button>
+      </div>
+    </div>`;
+}
+
 /** 按邀请码的可见范围过滤账号（仅影响展示页 UI）。 */
 function filterUsersByInvite(users) {
   const invite = state.invite;
@@ -1120,6 +1169,7 @@ async function boot() {
   el.gateInput = document.getElementById('gateInput');
   el.gateBtn = document.getElementById('gateBtn');
   el.gateMsg = document.getElementById('gateMsg');
+  el.settingsRoot = document.getElementById('settingsRoot');
 
   tickClock();
   setInterval(tickClock, 30000);
