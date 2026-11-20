@@ -142,6 +142,7 @@ const state = {
   unread: null,
   cache: new Map(),
   records: new Map(),
+  threadPushed: false,
   seq: 0,
 };
 
@@ -287,6 +288,12 @@ function recordHref(record) {
 /** 顶层评论在内存里的索引 key（用于站内打开楼中楼页面）。 */
 function recordKey(rec) {
   return String(rec.recordId || `${rec.postId || ''}:${rec.sourceId || ''}:${rec.authorUid || ''}:${rec.ms || ''}`);
+}
+
+/** 回复去重：同一条评论可能同时出现在 received/sent/both，recordId 不同但 sourceId 相同。 */
+function replyIdentity(rec) {
+  const source = String(rec.sourceId || '');
+  return source ? `${rec.postId || ''}:${source}` : recordKey(rec);
 }
 
 /** 把记录放进内存索引，点击卡片时按 key 取回。 */
@@ -658,7 +665,7 @@ function threadItemHtml(rec, isTop) {
 }
 
 function renderThread(top, replies) {
-  if (!el.threadRoot) return;
+  if (!el.threadRoot || !state.threadPushed) return;
   const list = replies.length
     ? replies.map((rec) => threadItemHtml(rec, false)).join('')
     : '<p class="thread-empty">暂无回复</p>';
@@ -678,8 +685,14 @@ function renderThread(top, replies) {
   el.threadRoot.classList.add('show');
 }
 
-function closeThread() {
+function closeThread(fromHistory = false) {
   if (!el.threadRoot) return;
+  // 自己点返回时消费掉 pushState 的历史记录，交给 popstate 真正关闭
+  if (!fromHistory && state.threadPushed) {
+    history.back();
+    return;
+  }
+  state.threadPushed = false;
   el.threadRoot.classList.remove('show');
   el.threadRoot.innerHTML = '';
 }
@@ -698,6 +711,10 @@ async function openThread(key) {
       <div class="thread-body"><div class="sk-row"><span class="sk-avatar"></span><span class="sk-lines"><i></i><i></i></span></div></div>
     </div>`;
   el.threadRoot.classList.add('show');
+  if (!state.threadPushed) {
+    history.pushState({ thread: key }, '', location.href);
+    state.threadPushed = true;
+  }
 
   let replies = [];
   if (rootId) {
@@ -710,7 +727,7 @@ async function openThread(key) {
     for (const rec of lists.flat()) {
       if (String(rec.rootId || '') !== rootId) continue;
       if (String(rec.sourceId || '') === rootId) continue;
-      const id = recordKey(rec);
+      const id = replyIdentity(rec);
       if (seen.has(id)) continue;
       seen.add(id);
       replies.push(rec);
@@ -1359,6 +1376,9 @@ async function boot() {
   });
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') closeThread();
+  });
+  window.addEventListener('popstate', () => {
+    if (el.threadRoot && el.threadRoot.classList.contains('show')) closeThread(true);
   });
   if (window.visualViewport) window.visualViewport.addEventListener('resize', syncAppHeight);
 
