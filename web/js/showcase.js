@@ -1205,10 +1205,22 @@ function syncAppHeight() {
   document.documentElement.style.setProperty('--app-height', `${height}px`);
 }
 
+/** iOS 返回后 innerHeight 可能停留在带工具栏的旧高度，标记后由 CSS 用 100vh 撑满。 */
+function ensureFullViewport() {
+  if (!IS_IOS || !IS_STANDALONE) return;
+  const screenHeight = window.screen.height || 0;
+  const inner = window.innerHeight || 0;
+  if (screenHeight > 0 && screenHeight - inner > 80) document.documentElement.classList.add('viewport-full');
+}
+
 /** Safari 从微博返回时高度会晚几百毫秒才稳定，多补几次，不刷新也不动滚动位置。 */
 function resyncViewport() {
   syncAppHeight();
-  for (const delay of [60, 200, 500, 1000]) window.setTimeout(syncAppHeight, delay);
+  ensureFullViewport();
+  for (const delay of [60, 200, 500, 1000]) {
+    window.setTimeout(syncAppHeight, delay);
+    window.setTimeout(ensureFullViewport, delay);
+  }
 }
 
 const INVITE_KEY = 'weibo-showcase-invite-v1';
@@ -1418,6 +1430,7 @@ async function boot() {
   });
 
   syncAppHeight();
+  ensureFullViewport();
   window.addEventListener('resize', syncAppHeight);
   window.addEventListener('orientationchange', syncAppHeight);
   // 从微博 App / 其他页面回来后只重算视口高度，不刷新页面、不把滚动位置拉回顶部
