@@ -1401,7 +1401,7 @@ a.card-text {
 
   .phone {
     position: fixed;
-    top: 0;
+    top: var(--app-top, 0);
     right: 0;
     bottom: auto;
     left: 0;
@@ -1488,13 +1488,6 @@ body.is-fullscreen .statusbar {
 
 /* iOS 独立窗口：安全区由外层承担，避免内容顶到状态栏下面被系统材质模糊 */
 @media (display-mode: standalone) {
-  /* 独立窗口没有浏览器工具栏，100vh 就是整屏高度；不要用返回后可能变小的 innerHeight */
-  html,
-  body,
-  .phone {
-    height: 100vh;
-  }
-
   .phone {
     padding-top: env(safe-area-inset-top, 0px);
   }
@@ -1505,9 +1498,11 @@ body.is-fullscreen .statusbar {
   }
 }
 
-/* iOS 从外部页面返回时可能保留带浏览器工具栏的旧视口，强制按整屏高度铺满 */
-html.viewport-full .phone {
-  height: 100vh !important;
+/* 内容区必须允许收缩，否则底部导航会被过长的列表顶出屏幕 */
+@media (max-width: 520px), (max-height: 720px) {
+  .screen {
+    min-height: 0;
+  }
 }
 
 /* 页面切换：进入详情从右滑入，返回从左滑入 */

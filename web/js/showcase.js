@@ -1186,41 +1186,36 @@ function tickClock() {
 
 /** iOS 独立窗口切走再回来后视口高度会变化，重新计算并锁定 --app-height。 */
 let appHeight = 0;
+let appTop = 0;
 
 function syncAppHeight() {
   const viewport = window.visualViewport;
   const inner = window.innerHeight || 0;
   let height = inner;
-  // iOS 独立窗口只认 innerHeight：screen.height 会比可视区大（底部栏被顶出屏幕），
-  // visualViewport 在从外部返回时会来回抖动
-  if (!(IS_STANDALONE && IS_IOS) && viewport) {
+  let top = 0;
+  if (viewport) {
     // 键盘弹出时 visualViewport 会大幅变小，此时保留整页高度，避免输入框把页面压扁
     const keyboardOpen = inner - viewport.height > 150;
     height = keyboardOpen ? inner : viewport.height;
+    top = keyboardOpen ? 0 : viewport.offsetTop || 0;
   }
   height = Math.round(height);
+  top = Math.round(top);
   // 高度没变就不写 DOM，避免返回后多次重算造成页面上下抖动
-  if (height <= 0 || height === appHeight) return;
-  appHeight = height;
-  document.documentElement.style.setProperty('--app-height', `${height}px`);
-}
-
-/** iOS 返回后 innerHeight 可能停留在带工具栏的旧高度，标记后由 CSS 用 100vh 撑满。 */
-function ensureFullViewport() {
-  if (!IS_IOS || !IS_STANDALONE) return;
-  const screenHeight = window.screen.height || 0;
-  const inner = window.innerHeight || 0;
-  if (screenHeight > 0 && screenHeight - inner > 80) document.documentElement.classList.add('viewport-full');
+  if (height > 0 && height !== appHeight) {
+    appHeight = height;
+    document.documentElement.style.setProperty('--app-height', `${height}px`);
+  }
+  if (top !== appTop) {
+    appTop = top;
+    document.documentElement.style.setProperty('--app-top', `${top}px`);
+  }
 }
 
 /** Safari 从微博返回时高度会晚几百毫秒才稳定，多补几次，不刷新也不动滚动位置。 */
 function resyncViewport() {
   syncAppHeight();
-  ensureFullViewport();
-  for (const delay of [60, 200, 500, 1000]) {
-    window.setTimeout(syncAppHeight, delay);
-    window.setTimeout(ensureFullViewport, delay);
-  }
+  for (const delay of [60, 200, 500, 1000]) window.setTimeout(syncAppHeight, delay);
 }
 
 const INVITE_KEY = 'weibo-showcase-invite-v1';
@@ -1430,7 +1425,6 @@ async function boot() {
   });
 
   syncAppHeight();
-  ensureFullViewport();
   window.addEventListener('resize', syncAppHeight);
   window.addEventListener('orientationchange', syncAppHeight);
   // 从微博 App / 其他页面回来后只重算视口高度，不刷新页面、不把滚动位置拉回顶部
