@@ -250,7 +250,10 @@ function userAvatar(user, size) {
 const IS_MOBILE = /Android|iPhone|iPad|iPod|HarmonyOS|Mobile/i.test(navigator.userAgent);
 const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
 const IS_STANDALONE =
-  window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  window.matchMedia('(display-mode: standalone)').matches ||
+  window.matchMedia('(display-mode: fullscreen)').matches ||
+  window.matchMedia('(display-mode: minimal-ui)').matches ||
+  window.navigator.standalone === true;
 
 function externalLinkAttrs(href) {
   const value = String(href || '');
@@ -698,7 +701,7 @@ function closeThread(fromHistory = false) {
 }
 
 /** 站内楼中楼：展示顶层评论 + 归档到的回复，不跳转外部。 */
-async function openThread(key) {
+async function openThread(key, fromHistory = false) {
   const top = state.records.get(key);
   if (!top || !el.threadRoot) return;
   const rootId = String(top.sourceId || top.rootId || '');
@@ -712,7 +715,8 @@ async function openThread(key) {
     </div>`;
   el.threadRoot.classList.add('show');
   if (!state.threadPushed) {
-    history.pushState({ thread: key }, '', location.href);
+    // 从历史前进/后退恢复时不再新增历史记录
+    if (!fromHistory) history.pushState({ thread: key }, '', location.href);
     state.threadPushed = true;
   }
 
@@ -1176,21 +1180,24 @@ function tickClock() {
 }
 
 /** iOS 独立窗口切走再回来后视口高度会变化，重新计算并锁定 --app-height。 */
+let appHeight = 0;
+
 function syncAppHeight() {
   const viewport = window.visualViewport;
   const inner = window.innerHeight || 0;
   let height = inner;
-  if (IS_STANDALONE && IS_IOS) {
-    // iOS 添加到主屏幕后 WebView 从微博返回时 innerHeight / visualViewport 会短暂报小，
-    // 独立窗口直接铺满物理屏幕，避免底部空白
-    height = window.screen.height || inner;
-  } else if (viewport) {
+  // iOS 独立窗口只认 innerHeight：screen.height 会比可视区大（底部栏被顶出屏幕），
+  // visualViewport 在从外部返回时会来回抖动
+  if (!(IS_STANDALONE && IS_IOS) && viewport) {
     // 键盘弹出时 visualViewport 会大幅变小，此时保留整页高度，避免输入框把页面压扁
     const keyboardOpen = inner - viewport.height > 150;
     height = keyboardOpen ? inner : viewport.height;
   }
   height = Math.round(height);
-  if (height > 0) document.documentElement.style.setProperty('--app-height', `${height}px`);
+  // 高度没变就不写 DOM，避免返回后多次重算造成页面上下抖动
+  if (height <= 0 || height === appHeight) return;
+  appHeight = height;
+  document.documentElement.style.setProperty('--app-height', `${height}px`);
 }
 
 /** Safari 从微博返回时高度会晚几百毫秒才稳定，多补几次，不刷新也不动滚动位置。 */
@@ -1392,7 +1399,14 @@ async function boot() {
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') closeThread();
   });
-  window.addEventListener('popstate', () => {
+  window.addEventListener('popstate', (event) => {
+    const key = event.state && event.state.thread;
+    if (key) {
+      // 浏览器「前进」回到楼中楼
+      if (el.threadRoot && !el.threadRoot.classList.contains('show')) void openThread(key, true);
+      return;
+    }
+    // 浏览器「后退」离开楼中楼
     if (el.threadRoot && el.threadRoot.classList.contains('show')) closeThread(true);
   });
   if (window.visualViewport) window.visualViewport.addEventListener('resize', syncAppHeight);
