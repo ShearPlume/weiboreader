@@ -141,6 +141,16 @@ export function updateScope(code, scope, accounts) {
   return dto(entry);
 }
 
+/** 修改备注描述。 */
+export function updateNote(code, note) {
+  const doc = read();
+  const entry = doc.codes[normalize(code)];
+  if (!entry) return null;
+  entry.note = String(note || '').trim().slice(0, 80);
+  write(doc);
+  return dto(entry);
+}
+
 /** 删除。 */
 export function remove(code) {
   const doc = read();

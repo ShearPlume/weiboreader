@@ -924,7 +924,7 @@ function switchUser(uid) {
   tip(`已切换到 ${user.screenName || uid}`);
 }
 
-function onClick(event) {
+async function onClick(event) {
   const target = event.target instanceof Element ? event.target : null;
   if (!target) return;
 
@@ -932,7 +932,33 @@ function onClick(event) {
     openInviteSettings();
     return;
   }
-  if (target.closest('[data-switch-invite]') || target.closest('[data-clear-invite]')) {
+  const inviteSwitchBtn = target.closest('[data-switch-invite]');
+  if (inviteSwitchBtn) {
+    const card = inviteSwitchBtn.closest('.settings-card');
+    const input = card && card.querySelector('#switchInviteInput');
+    const msg = card && card.querySelector('#switchInviteMsg');
+    const code = input ? input.value.trim() : '';
+    if (!code) {
+      if (msg) msg.textContent = '请输入新邀请码';
+      return;
+    }
+    if (msg) msg.textContent = '验证中…';
+    inviteSwitchBtn.disabled = true;
+    const result = await verifyInvite(code);
+    if (result.ok) {
+      try {
+        localStorage.setItem(INVITE_KEY, code);
+      } catch {
+        /* 隐私模式下忽略 */
+      }
+      reloadApp();
+      return;
+    }
+    if (msg) msg.textContent = result.reason || '邀请码无效';
+    inviteSwitchBtn.disabled = false;
+    return;
+  }
+  if (target.closest('[data-clear-invite]')) {
     try {
       localStorage.removeItem(INVITE_KEY);
     } catch {
@@ -1149,12 +1175,21 @@ function openInviteSettings() {
         <p>当前邀请码<br><span class="settings-code">${esc(code || '未验证')}</span></p>
         <p>可见范围：${esc(scopeText)}</p>
         <div class="settings-actions">
+          <input class="settings-input" id="switchInviteInput" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="输入新邀请码（如 WX-XXXX-XXXX）">
           <button class="settings-btn primary" type="button" data-switch-invite>切换邀请码</button>
           <button class="settings-btn ghost" type="button" data-clear-invite>清除当前邀请码</button>
+          <div class="settings-msg" id="switchInviteMsg"></div>
         </div>
         <button class="settings-close" type="button" data-close-settings>取消</button>
       </div>
     </div>`;
+  const switchInput = el.settingsRoot.querySelector('#switchInviteInput');
+  const switchBtn = el.settingsRoot.querySelector('[data-switch-invite]');
+  if (switchInput && switchBtn) {
+    switchInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') switchBtn.click();
+    });
+  }
 }
 
 /** 按邀请码的可见范围过滤账号（仅影响展示页 UI）。 */

@@ -30,7 +30,7 @@ function rowHtml(invite) {
   const expires = invite.expiresAtMs ? `至 ${fmtTime(invite.expiresAtMs)}` : '永久';
   return `<tr>
     <td class="mono">${esc(invite.code)}</td>
-    <td>${esc(invite.note || '—')}</td>
+    <td><button class="link-btn" type="button" data-note="${esc(invite.code)}" title="点击修改备注">${esc(invite.note || '—')}</button></td>
     <td>${esc(scopeLabel(invite))}</td>
     <td class="num">${Number(invite.uses) || 0}</td>
     <td><span class="badge ${meta.cls}">${meta.label}</span></td>
@@ -254,9 +254,61 @@ export async function renderInvites(root) {
     });
   };
 
+  const openNoteEditor = (invite) => {
+    if (!invite) return;
+    const modalRoot = document.getElementById('modalRoot');
+    if (!modalRoot) return;
+    modalRoot.innerHTML = `
+      <div class="modal-mask">
+        <div class="modal">
+          <h3>修改备注</h3>
+          <div class="modal-desc">邀请码 <code class="mono">${esc(invite.code)}</code></div>
+          <div class="field" style="margin-top:12px">
+            <label for="editNote">备注（给谁、用途）</label>
+            <input class="input" id="editNote" maxlength="80" placeholder="例如：给同事的预览码" value="${esc(invite.note || '')}">
+          </div>
+          <div class="form-error" id="editNoteErr" style="min-height:18px"></div>
+          <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+            <button class="btn" type="button" id="editNoteCancel">取消</button>
+            <button class="btn btn-primary" type="button" id="editNoteSave">保存</button>
+          </div>
+        </div>
+      </div>`;
+    const modal = modalRoot.querySelector('.modal');
+    const input = modal.querySelector('#editNote');
+    const errBox = modal.querySelector('#editNoteErr');
+    const close = () => {
+      modalRoot.innerHTML = '';
+    };
+    modal.querySelector('#editNoteCancel').addEventListener('click', close);
+    input.focus();
+    input.select();
+    modal.querySelector('#editNoteSave').addEventListener('click', async () => {
+      const saveBtn = modal.querySelector('#editNoteSave');
+      saveBtn.disabled = true;
+      try {
+        await api(`/api/invites/${encodeURIComponent(invite.code)}`, {
+          method: 'PATCH',
+          body: { note: input.value.trim() },
+        });
+        close();
+        await renderInvites(root);
+        toast('备注已更新', 'ok');
+      } catch (err) {
+        errBox.textContent = err && err.message ? err.message : '保存失败';
+        saveBtn.disabled = false;
+      }
+    });
+  };
+
   root.onclick = async (event) => {
     const target = event.target.closest('button');
     if (!target) return;
+    const noteCode = target.dataset.note;
+    if (noteCode) {
+      openNoteEditor(items.find((invite) => invite.code === noteCode));
+      return;
+    }
     const scopeCode = target.dataset.scope;
     if (scopeCode) {
       openScopeEditor(items.find((invite) => invite.code === scopeCode));

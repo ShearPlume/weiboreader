@@ -867,6 +867,11 @@ async function hInviteCreate(ctx) {
 async function hInvitePatch(ctx) {
   const body = ctx.body || {};
   let invite = null;
+  if (body.note !== undefined) {
+    if (typeof body.note !== 'string') throw new AppError('BAD_REQUEST', '备注必须是字符串', 400);
+    invite = invites.updateNote(ctx.params[0], body.note);
+    if (!invite) throw new AppError('NOT_FOUND', '邀请码不存在', 404);
+  }
   if (body.scope !== undefined) {
     const scope = ['default', 'all', 'selected'].includes(body.scope) ? body.scope : 'default';
     const accounts = Array.isArray(body.accounts) ? body.accounts : [];

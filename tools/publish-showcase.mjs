@@ -344,8 +344,11 @@ async function main() {
 
   if (opts.mode !== 'static') {
     const exportedUsers = users.map((user) => {
-      const avatar = avatarByUid.get(String(user.uid));
-      return { ...user, avatarFile: avatar ? avatar.file : '' };
+      const uid = String(user.uid);
+      const avatar = avatarByUid.get(uid);
+      const profile = profiles[uid];
+      const name = profile && profile.screenName ? profile.screenName : user.screenName;
+      return { ...user, screenName: name, avatarFile: avatar ? avatar.file : '' };
     });
     const exportedProfiles = {};
     for (const [uid, profile] of Object.entries(profiles)) {

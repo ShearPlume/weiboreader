@@ -159,6 +159,22 @@ function saveDoc(doc) {
   fs.writeFileSync(PROFILE_FILE, `${JSON.stringify(doc, null, 2)}\n`);
 }
 
+/** 把最新昵称同步回 users.json，避免后台/展示页仍显示“用户<uid>”。 */
+function syncUserNames(profiles) {
+  const file = path.join(DEFAULT_DATA_DIR, 'users.json');
+  const usersDoc = readJson(file, null);
+  if (!usersDoc || !Array.isArray(usersDoc.users)) return;
+  let changed = false;
+  for (const user of usersDoc.users) {
+    const profile = profiles[String(user.uid)];
+    if (profile && profile.screenName && user.screenName !== profile.screenName) {
+      user.screenName = profile.screenName;
+      changed = true;
+    }
+  }
+  if (changed) fs.writeFileSync(file, `${JSON.stringify(usersDoc, null, 2)}\n`);
+}
+
 /** 本地已缓存头像文件（按扩展名探测）。 */
 function existingAvatar(uid) {
   for (const ext of AVATAR_EXTS) {
@@ -265,6 +281,7 @@ async function main() {
     await sleep(opts.delay + Math.round(Math.random() * opts.delay * 0.5));
   }
   saveDoc(doc);
+  syncUserNames(doc.profiles);
   console.log(`完成：成功 ${done}，失败 ${failed}，累计缓存 ${Object.keys(doc.profiles).length} 个用户。`);
 }
 

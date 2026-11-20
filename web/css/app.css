@@ -1542,3 +1542,17 @@ table.data tr:hover td {
     margin-bottom: 10px;
   }
 }
+
+.link-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.link-btn:hover {
+  text-decoration: underline;
+}
