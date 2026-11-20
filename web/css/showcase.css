@@ -502,6 +502,10 @@ a.card-text {
   text-decoration: none;
 }
 
+[data-thread] {
+  cursor: pointer;
+}
+
 .me-visit {
   color: inherit;
   text-decoration: none;
@@ -1721,4 +1725,188 @@ body.is-fullscreen .statusbar {
   font-size: 12px;
   line-height: 1.4;
   color: var(--wx-red);
+}
+
+/* 站内楼中楼页面 */
+.thread-root {
+  position: absolute;
+  top: 32px;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 40;
+  pointer-events: none;
+}
+
+.thread-root:empty {
+  display: none;
+}
+
+.thread-root.show {
+  pointer-events: auto;
+}
+
+.thread-page {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+}
+
+.thread-nav {
+  position: relative;
+  flex: none;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--wx-divider);
+}
+
+.thread-back {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #333;
+}
+
+.thread-title {
+  flex: 1;
+  padding-right: 40px;
+  text-align: center;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.thread-body {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 64px;
+  scrollbar-width: none;
+}
+
+.thread-body::-webkit-scrollbar {
+  width: 0;
+}
+
+.thread-item {
+  display: flex;
+  gap: 10px;
+  padding: 14px;
+}
+
+.thread-item + .thread-item {
+  border-top: 1px solid var(--wx-divider);
+}
+
+.thread-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.thread-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.thread-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a1a;
+  text-decoration: none;
+}
+
+.thread-v {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #ffb400;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.thread-text {
+  display: block;
+  margin-top: 5px;
+  font-size: 16px;
+  line-height: 1.55;
+  color: #222;
+  text-decoration: none;
+  word-break: break-word;
+}
+
+.thread-text .at {
+  color: var(--wx-link);
+}
+
+.thread-text-link {
+  color: #222;
+}
+
+.thread-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: #9d9d9d;
+}
+
+.thread-like {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #9d9d9d;
+}
+
+.thread-like .i {
+  width: 17px;
+  height: 17px;
+}
+
+.thread-origin {
+  display: inline-block;
+  margin-top: 10px;
+  color: #4a90d9;
+  font-size: 15px;
+  text-decoration: none;
+}
+
+.thread-sep {
+  height: 8px;
+  background: var(--wx-bg-soft);
+}
+
+.thread-empty {
+  margin: 26px 0;
+  text-align: center;
+  font-size: 14px;
+  color: #9d9d9d;
+}
+
+.thread-replybar {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 50px;
+  padding: 0 18px;
+  text-align: left;
+  font-size: 15px;
+  color: #b0b0b0;
+  background: #fff;
+  border-top: 1px solid var(--wx-divider);
 }

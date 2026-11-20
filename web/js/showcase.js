@@ -141,10 +141,11 @@ const state = {
   option: { at: 'all-posts', comments: 'all' },
   unread: null,
   cache: new Map(),
+  records: new Map(),
   seq: 0,
 };
 
-const el = { navbar: null, screen: null, tabbar: null, overlay: null, tip: null, fsBtn: null };
+const el = { navbar: null, screen: null, tabbar: null, overlay: null, threadRoot: null, tip: null, fsBtn: null };
 let tipTimer = null;
 
 /* ------------------------------------------------------------------ *
@@ -281,6 +282,18 @@ function recordHref(record) {
     return `https://m.weibo.cn/detail/${postId}?cid=${rootId}`;
   }
   return `https://m.weibo.cn/detail/${postId}`;
+}
+
+/** 顶层评论在内存里的索引 key（用于站内打开楼中楼页面）。 */
+function recordKey(rec) {
+  return String(rec.recordId || `${rec.postId || ''}:${rec.sourceId || ''}:${rec.authorUid || ''}:${rec.ms || ''}`);
+}
+
+/** 把记录放进内存索引，点击卡片时按 key 取回。 */
+function registerRecord(rec) {
+  const key = recordKey(rec);
+  state.records.set(key, rec);
+  return key;
 }
 
 /** 头像外层加主页链接；没有 UID 时退回纯头像。 */
@@ -560,15 +573,19 @@ function cardHtml(rec, kind) {
   const sourceId = String(rec.sourceId || '');
   const rootId = String(rec.rootId || '');
   const isReply = Boolean(sourceId) && Boolean(rootId) && sourceId !== rootId;
+  const isParentComment = isComment && !isReply;
+  const threadKey = isParentComment ? registerRecord(rec) : '';
+  const nameAttrs = threadKey ? `data-thread="${esc(threadKey)}" role="button" tabindex="0"` : linkAttrs;
+  const textAttrs = threadKey ? `data-thread="${esc(threadKey)}" role="button" tabindex="0"` : linkAttrs;
   const postLink =
     isComment && isReply && postHref ? `<a class="act" ${externalLinkAttrs(postHref)}>原微博</a>` : '';
   return `<article class="card">
     ${avatarLink(rec.authorUid, avatarHtml(name, rec.authorUid || name, 44))}
     <div class="card-main">
-      <div class="card-head"><a class="card-name" ${linkAttrs}>${esc(name)}</a></div>
+      <div class="card-head"><a class="card-name" ${nameAttrs}>${esc(name)}</a></div>
       <div class="card-sub"><span>${esc(subText(rec, kind))}</span><span>·</span><span>${esc(feedTime(rec.ms))}</span></div>
       <div class="card-body">
-        <a class="card-text" ${linkAttrs}>${richText(rec.text)}</a>
+        <a class="card-text" ${textAttrs}>${richText(rec.text)}</a>
         ${media}
       </div>
       <div class="actions">
@@ -589,6 +606,7 @@ async function buildFeed(kind) {
   let list = lists.flat();
   if (typeof active.filter === 'function') list = list.filter(active.filter);
   list.sort((a, b) => b.ms - a.ms);
+  for (const rec of list) registerRecord(rec);
   if (!list.length) {
     // 「收到/被@」为空时给出可切换的替代筛选，避免只看到空页
     const action =
@@ -605,6 +623,101 @@ async function buildFeed(kind) {
 
 function buildLikes() {
   return emptyHtml(ICON.likeEmpty, '暂无新的赞', '本地归档不包含点赞通知数据，这里仅还原界面。');
+}
+
+function threadVerified(uid) {
+  const profile = state.profiles[String(uid)];
+  return profile && profile.verified ? '<span class="thread-v">V</span>' : '';
+}
+
+/** 楼中楼里的一条评论；顶层评论不跳转，回复点击跳真实微博。 */
+function threadItemHtml(rec, isTop) {
+  const name = rec.author || '微博用户';
+  const likes = Number(rec.likes) > 0 ? `${Number(rec.likes)}` : '';
+  const body = isTop
+    ? `<div class="thread-text">${richText(rec.text)}</div>`
+    : `<a class="thread-text thread-text-link" ${externalLinkAttrs(recordHref(rec))}>${richText(rec.text)}</a>`;
+  const origin = isTop
+    ? `<a class="thread-origin" ${externalLinkAttrs(recordPostHref(rec))}>查看原微博</a>`
+    : '';
+  return `<article class="thread-item">
+    ${avatarLink(rec.authorUid, avatarHtml(name, rec.authorUid || name, 40))}
+    <div class="thread-main">
+      <div class="thread-head">
+        <a class="thread-name" ${externalLinkAttrs(profileHref(rec.authorUid))}>${esc(name)}</a>
+        ${threadVerified(rec.authorUid)}
+      </div>
+      ${body}
+      <div class="thread-meta">
+        <span>${esc(feedTime(rec.ms))}</span>
+        <span class="thread-like">${ICON.thumb}${likes}</span>
+      </div>
+      ${origin}
+    </div>
+  </article>`;
+}
+
+function renderThread(top, replies) {
+  if (!el.threadRoot) return;
+  const list = replies.length
+    ? replies.map((rec) => threadItemHtml(rec, false)).join('')
+    : '<p class="thread-empty">暂无回复</p>';
+  el.threadRoot.innerHTML = `
+    <div class="thread-page">
+      <div class="thread-nav">
+        <button class="thread-back" type="button" data-thread-close aria-label="返回">${ICON.back}</button>
+        <div class="thread-title">${replies.length}条回复</div>
+      </div>
+      <div class="thread-body">
+        ${threadItemHtml(top, true)}
+        <div class="thread-sep"></div>
+        ${list}
+      </div>
+      <button class="thread-replybar" type="button" data-demo>回复@${esc(top.author || '微博用户')}：</button>
+    </div>`;
+  el.threadRoot.classList.add('show');
+}
+
+function closeThread() {
+  if (!el.threadRoot) return;
+  el.threadRoot.classList.remove('show');
+  el.threadRoot.innerHTML = '';
+}
+
+/** 站内楼中楼：展示顶层评论 + 归档到的回复，不跳转外部。 */
+async function openThread(key) {
+  const top = state.records.get(key);
+  if (!top || !el.threadRoot) return;
+  const rootId = String(top.sourceId || top.rootId || '');
+  el.threadRoot.innerHTML = `
+    <div class="thread-page">
+      <div class="thread-nav">
+        <button class="thread-back" type="button" data-thread-close aria-label="返回">${ICON.back}</button>
+        <div class="thread-title">回复</div>
+      </div>
+      <div class="thread-body"><div class="sk-row"><span class="sk-avatar"></span><span class="sk-lines"><i></i><i></i></span></div></div>
+    </div>`;
+  el.threadRoot.classList.add('show');
+
+  let replies = [];
+  if (rootId) {
+    const lists = await Promise.all(
+      ['received', 'mentions-comments', 'sent', 'both'].map((mode) =>
+        itemsOf(state.uid, mode).catch(() => [])
+      )
+    );
+    const seen = new Set();
+    for (const rec of lists.flat()) {
+      if (String(rec.rootId || '') !== rootId) continue;
+      if (String(rec.sourceId || '') === rootId) continue;
+      const id = recordKey(rec);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      replies.push(rec);
+    }
+    replies.sort((a, b) => a.ms - b.ms);
+  }
+  renderThread(top, replies);
 }
 
 function acctRow(user) {
@@ -928,6 +1041,15 @@ async function onClick(event) {
   const target = event.target instanceof Element ? event.target : null;
   if (!target) return;
 
+  if (target.closest('[data-thread-close]')) {
+    closeThread();
+    return;
+  }
+  const threadNode = target.closest('[data-thread]');
+  if (threadNode) {
+    await openThread(threadNode.dataset.thread);
+    return;
+  }
   if (target.closest('[data-invite-settings]')) {
     openInviteSettings();
     return;
@@ -1044,13 +1166,8 @@ function syncAppHeight() {
   if (height > 0) document.documentElement.style.setProperty('--app-height', `${height}px`);
 }
 
-/** 重载一次以重置 iOS 返回后可能被压小的 webview 视口（带防重入标记）。 */
+/** 只在用户主动切换邀请码时重载，日常翻页不再自动刷新。 */
 function reloadApp() {
-  try {
-    sessionStorage.setItem('wx-reloading', '1');
-  } catch {
-    /* 隐私模式下忽略 */
-  }
   window.location.reload();
 }
 
@@ -1205,6 +1322,7 @@ async function boot() {
   el.screen = document.getElementById('screen');
   el.tabbar = document.getElementById('tabbar');
   el.overlay = document.getElementById('overlayRoot');
+  el.threadRoot = document.getElementById('threadRoot');
   el.tip = document.getElementById('floatTip');
   el.fsBtn = document.getElementById('fsBtn');
   if (el.fsBtn) {
@@ -1232,68 +1350,15 @@ async function boot() {
   syncAppHeight();
   window.addEventListener('resize', syncAppHeight);
   window.addEventListener('orientationchange', syncAppHeight);
-  window.addEventListener('pagehide', () => {
-    try {
-      if (sessionStorage.getItem('wx-reloading') === '1') {
-        sessionStorage.removeItem('wx-reloading');
-        return;
-      }
-      sessionStorage.setItem('wx-left-at', String(Date.now()));
-    } catch {
-      /* 隐私模式下忽略 */
-    }
-  });
-  window.addEventListener('pageshow', (event) => {
-    let leftAt = 0;
-    try {
-      leftAt = Number(sessionStorage.getItem('wx-left-at') || 0);
-    } catch {
-      leftAt = 0;
-    }
-    let navType = '';
-    try {
-      navType = (performance.getEntriesByType('navigation')[0] || {}).type || '';
-    } catch {
-      navType = '';
-    }
-    if (navType === 'reload') {
-      try {
-        sessionStorage.removeItem('wx-left-at');
-      } catch {
-        /* 隐私模式下忽略 */
-      }
-    } else if (event.persisted || (leftAt && Date.now() - leftAt < 600000)) {
-      try {
-        sessionStorage.removeItem('wx-left-at');
-      } catch {
-        /* 隐私模式下忽略 */
-      }
-      reloadApp();
-      return;
-    }
+  // 从微博 App / 其他页面回来后只重算视口高度，不刷新页面、不把滚动位置拉回顶部
+  window.addEventListener('pageshow', () => {
     syncAppHeight();
-    window.setTimeout(() => {
-      window.scrollTo(0, 0);
-      void document.documentElement.offsetHeight;
-      syncAppHeight();
-    }, 300);
   });
-  let hiddenAt = 0;
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-      hiddenAt = Date.now();
-      return;
-    }
-    if (hiddenAt && Date.now() - hiddenAt > 800) {
-      hiddenAt = 0;
-      reloadApp();
-      return;
-    }
-    syncAppHeight();
-    window.setTimeout(() => {
-      void document.documentElement.offsetHeight;
-      syncAppHeight();
-    }, 300);
+    if (!document.hidden) syncAppHeight();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeThread();
   });
   if (window.visualViewport) window.visualViewport.addEventListener('resize', syncAppHeight);
 
@@ -1303,7 +1368,11 @@ async function boot() {
 
   try {
     const [users, profiles] = await Promise.all([loadUsers(), loadProfiles()]);
-    state.users = filterUsersByInvite(users);
+    // users.json 可能是旧快照（昵称仍为“用户<uid>”），以 profiles 里的真实昵称为准
+    state.users = filterUsersByInvite(users).map((user) => {
+      const profile = profiles[String(user.uid)];
+      return profile && profile.screenName ? { ...user, screenName: profile.screenName } : user;
+    });
     state.profiles = profiles;
   } catch (err) {
     setScreen(errorHtml(err));
