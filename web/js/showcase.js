@@ -1177,10 +1177,18 @@ function tickClock() {
 
 /** iOS 独立窗口切走再回来后视口高度会变化，重新计算并锁定 --app-height。 */
 function syncAppHeight() {
-  const height = Math.round(
-    Math.max(window.innerHeight || 0, window.visualViewport ? window.visualViewport.height : 0)
-  );
+  const viewport = window.visualViewport;
+  const inner = window.innerHeight || 0;
+  // 键盘弹出时 visualViewport 会大幅变小，此时保留整页高度，避免输入框把页面压扁
+  const keyboardOpen = viewport ? inner - viewport.height > 150 : false;
+  const height = Math.round(keyboardOpen ? inner : viewport ? viewport.height : inner);
   if (height > 0) document.documentElement.style.setProperty('--app-height', `${height}px`);
+}
+
+/** Safari 从微博返回时高度会晚几百毫秒才稳定，多补几次，不刷新也不动滚动位置。 */
+function resyncViewport() {
+  syncAppHeight();
+  for (const delay of [60, 200, 500, 1000]) window.setTimeout(syncAppHeight, delay);
 }
 
 /** 只在用户主动切换邀请码时重载，日常翻页不再自动刷新。 */
@@ -1368,12 +1376,11 @@ async function boot() {
   window.addEventListener('resize', syncAppHeight);
   window.addEventListener('orientationchange', syncAppHeight);
   // 从微博 App / 其他页面回来后只重算视口高度，不刷新页面、不把滚动位置拉回顶部
-  window.addEventListener('pageshow', () => {
-    syncAppHeight();
-  });
+  window.addEventListener('pageshow', resyncViewport);
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) syncAppHeight();
+    if (!document.hidden) resyncViewport();
   });
+  window.addEventListener('focus', resyncViewport);
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') closeThread();
   });
