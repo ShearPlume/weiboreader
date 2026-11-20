@@ -259,11 +259,10 @@ const IS_STANDALONE =
 function externalLinkAttrs(href) {
   const value = String(href || '');
   if (!value) return '';
-  // 主屏幕应用里点击时用 location.replace：保持微博页正常加载图片，
-  // 同时把展示页从内嵌浏览器历史里替换掉，避免左下角返回进入压小的副本。
-  const target = IS_MOBILE ? '_self' : '_blank';
+  // 主屏幕应用用新窗口打开，返回时仍停留在评论列表；普通 Safari 保持同页打开。
+  const target = IS_STANDALONE ? '_blank' : IS_MOBILE ? '_self' : '_blank';
   const marker = IS_STANDALONE ? ' data-external="1"' : '';
-  return `href="${esc(value)}" target="${target}" rel="noopener"${marker}`;
+  return `href="${esc(value)}" target="${target}"${marker}`;
 }
 
 /** 用户主页（m.weibo.cn 在手机上可唤起微博 App）。 */
@@ -1069,7 +1068,8 @@ async function onClick(event) {
     const external = target.closest('a[data-external]');
     if (external && external.href) {
       event.preventDefault();
-      window.location.replace(external.href);
+      // 不用 noopener：保留 opener，微博页的图片/会话更接近普通打开
+      window.open(external.href, '_blank');
       return;
     }
   }
