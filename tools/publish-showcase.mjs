@@ -174,12 +174,24 @@ async function putAsset(opts, key, buffer, contentType, cacheControl, secrets) {
     'x-cos-acl': 'public-read',
   };
   if (cacheControl) headers['Cache-Control'] = cacheControl;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const res = await fetch(objectUrl(opts, key), { method: 'PUT', headers, body: buffer });
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    let res;
+    try {
+      res = await fetch(objectUrl(opts, key), {
+        method: 'PUT',
+        headers,
+        body: buffer,
+        signal: AbortSignal.timeout(30000),
+      });
+    } catch (err) {
+      if (attempt === 3) throw new Error(`PUT ${key} 网络错误：${err instanceof Error ? err.message : err}`);
+      await new Promise((resolve) => setTimeout(resolve, 800 * (attempt + 1)));
+      continue;
+    }
     if (res.ok) return 'uploaded';
     const text = await res.text();
-    if (attempt === 2 || res.status < 500) throw new Error(`PUT ${key} -> ${res.status} ${text.slice(0, 160)}`);
-    await new Promise((resolve) => setTimeout(resolve, 600 * (attempt + 1)));
+    if (attempt === 3 || res.status < 500) throw new Error(`PUT ${key} -> ${res.status} ${text.slice(0, 160)}`);
+    await new Promise((resolve) => setTimeout(resolve, 800 * (attempt + 1)));
   }
   return 'uploaded';
 }
