@@ -1489,21 +1489,19 @@ body.is-fullscreen .statusbar {
 
 /* iOS 独立窗口：安全区由外层承担，避免内容顶到状态栏下面被系统材质模糊 */
 @media (display-mode: standalone) {
-  /* 独立窗口没有浏览器工具栏，100vh 是稳定整屏高度；返回后 innerHeight/visualViewport 会报矮 */
-  html,
-  body,
   .phone {
-    height: 100vh;
-  }
-
-  .phone {
-    top: 0;
     padding-top: env(safe-area-inset-top, 0px);
   }
 
   .navbar {
     height: 48px;
     padding-top: 0;
+  }
+
+  /* 冷启动时 iOS 可能暂时把底部安全区报成 0，给底栏留最小安全距离，避免被 Home 条遮住 */
+  .tabbar {
+    height: calc(56px + max(env(safe-area-inset-bottom, 0px), 18px));
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 18px);
   }
 }
 
