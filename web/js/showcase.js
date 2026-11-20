@@ -253,9 +253,7 @@ const IS_STANDALONE =
 function externalLinkAttrs(href) {
   const value = String(href || '');
   if (!value) return '';
-  // 独立窗口里用 _blank：不要在 PWA 自己的 webview 里打开微博，
-  // 否则 iOS 从应用内浏览器返回时会把 webview 高度改小，底部出现空白。
-  return `href="${esc(value)}" target="_blank" rel="noopener"`;
+  return `href="${esc(value)}" target="${IS_MOBILE ? '_self' : '_blank'}" rel="noopener"`;
 }
 
 /** 用户主页（m.weibo.cn 在手机上可唤起微博 App）。 */
@@ -270,16 +268,19 @@ function recordPostHref(record) {
   return postId ? `https://m.weibo.cn/detail/${postId}` : String(record.postUrl || '');
 }
 
-/** 记录对应的原微博/评论：顶层评论用 sourceId，回复用 rootId 定位到所在评论线程。 */
+/** 顶层评论的 cid 在 m.weibo.cn 会打开空白，直接打开原微博；楼中楼回复用 rootId 定位。 */
 function recordHref(record) {
   const postId = String(record.postId || '');
   if (!postId) return String(record.postUrl || '');
   const isStatus = record.mode === 'mentions-posts' || record.mode === 'user-posts';
   if (isStatus) return `https://m.weibo.cn/detail/${postId}`;
-  const cid = String(record.rootId || record.sourceId || '');
-  return /^\d{1,20}$/.test(cid)
-    ? `https://m.weibo.cn/detail/${postId}?cid=${cid}`
-    : `https://m.weibo.cn/detail/${postId}`;
+  const sourceId = String(record.sourceId || '');
+  const rootId = String(record.rootId || '');
+  const isReply = Boolean(sourceId) && Boolean(rootId) && sourceId !== rootId;
+  if (isReply && /^\d{1,20}$/.test(rootId)) {
+    return `https://m.weibo.cn/detail/${postId}?cid=${rootId}`;
+  }
+  return `https://m.weibo.cn/detail/${postId}`;
 }
 
 /** 头像外层加主页链接；没有 UID 时退回纯头像。 */
@@ -556,8 +557,11 @@ function cardHtml(rec, kind) {
   const linkAttrs = externalLinkAttrs(recordHref(rec));
   const postHref = recordPostHref(rec);
   const isComment = rec.mode !== 'mentions-posts' && rec.mode !== 'user-posts';
+  const sourceId = String(rec.sourceId || '');
+  const rootId = String(rec.rootId || '');
+  const isReply = Boolean(sourceId) && Boolean(rootId) && sourceId !== rootId;
   const postLink =
-    isComment && postHref ? `<a class="act" ${externalLinkAttrs(postHref)}>原微博</a>` : '';
+    isComment && isReply && postHref ? `<a class="act" ${externalLinkAttrs(postHref)}>原微博</a>` : '';
   return `<article class="card">
     ${avatarLink(rec.authorUid, avatarHtml(name, rec.authorUid || name, 44))}
     <div class="card-main">
@@ -934,7 +938,7 @@ function onClick(event) {
     } catch {
       /* 隐私模式下忽略 */
     }
-    window.location.reload();
+    reloadApp();
     return;
   }
   if (target.closest('[data-close-settings]') || target.hasAttribute('data-settings-mask')) {
@@ -1012,6 +1016,16 @@ function syncAppHeight() {
     Math.max(window.innerHeight || 0, window.visualViewport ? window.visualViewport.height : 0)
   );
   if (height > 0) document.documentElement.style.setProperty('--app-height', `${height}px`);
+}
+
+/** 重载一次以重置 iOS 返回后可能被压小的 webview 视口（带防重入标记）。 */
+function reloadApp() {
+  try {
+    sessionStorage.setItem('wx-reloading', '1');
+  } catch {
+    /* 隐私模式下忽略 */
+  }
+  window.location.reload();
 }
 
 const INVITE_KEY = 'weibo-showcase-invite-v1';
@@ -1183,10 +1197,43 @@ async function boot() {
   syncAppHeight();
   window.addEventListener('resize', syncAppHeight);
   window.addEventListener('orientationchange', syncAppHeight);
+  window.addEventListener('pagehide', () => {
+    try {
+      if (sessionStorage.getItem('wx-reloading') === '1') {
+        sessionStorage.removeItem('wx-reloading');
+        return;
+      }
+      sessionStorage.setItem('wx-left-at', String(Date.now()));
+    } catch {
+      /* 隐私模式下忽略 */
+    }
+  });
   window.addEventListener('pageshow', (event) => {
-    // 从微博/应用内浏览器返回时 iOS 可能用 bfcache 恢复旧视口，直接重载最稳
-    if (event.persisted) {
-      window.location.reload();
+    let leftAt = 0;
+    try {
+      leftAt = Number(sessionStorage.getItem('wx-left-at') || 0);
+    } catch {
+      leftAt = 0;
+    }
+    let navType = '';
+    try {
+      navType = (performance.getEntriesByType('navigation')[0] || {}).type || '';
+    } catch {
+      navType = '';
+    }
+    if (navType === 'reload') {
+      try {
+        sessionStorage.removeItem('wx-left-at');
+      } catch {
+        /* 隐私模式下忽略 */
+      }
+    } else if (event.persisted || (leftAt && Date.now() - leftAt < 600000)) {
+      try {
+        sessionStorage.removeItem('wx-left-at');
+      } catch {
+        /* 隐私模式下忽略 */
+      }
+      reloadApp();
       return;
     }
     syncAppHeight();
@@ -1196,14 +1243,22 @@ async function boot() {
       syncAppHeight();
     }, 300);
   });
+  let hiddenAt = 0;
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) {
-      syncAppHeight();
-      window.setTimeout(() => {
-        void document.documentElement.offsetHeight;
-        syncAppHeight();
-      }, 300);
+    if (document.hidden) {
+      hiddenAt = Date.now();
+      return;
     }
+    if (hiddenAt && Date.now() - hiddenAt > 800) {
+      hiddenAt = 0;
+      reloadApp();
+      return;
+    }
+    syncAppHeight();
+    window.setTimeout(() => {
+      void document.documentElement.offsetHeight;
+      syncAppHeight();
+    }, 300);
   });
   if (window.visualViewport) window.visualViewport.addEventListener('resize', syncAppHeight);
 
