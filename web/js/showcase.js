@@ -977,7 +977,8 @@ const POST_TABS = [
 function postPicsHtml(pics, compact = false) {
   const list = Array.isArray(pics) ? pics : [];
   if (!list.length) return '';
-  const cls = list.length === 1 ? 'p1' : list.length === 2 ? 'p2' : list.length === 3 ? 'p3' : 'pn';
+  const cls =
+    list.length === 1 ? 'p1' : list.length === 2 ? 'p2' : list.length === 3 ? 'p3' : list.length === 4 ? 'p4' : 'pn';
   const cells = list
     .map(
       (pic) =>

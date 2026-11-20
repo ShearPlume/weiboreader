@@ -2099,6 +2099,10 @@ body.is-fullscreen .statusbar {
   grid-template-columns: repeat(3, 1fr);
 }
 
+.post-pics.p4 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
 .post-pics.compact {
   margin-top: 7px;
 }
