@@ -133,6 +133,7 @@ const TABS = [
 
 const state = {
   users: [],
+  allUsers: [],
   profiles: {},
   invite: null,
   uid: null,
@@ -1094,7 +1095,9 @@ async function onClick(event) {
       } catch {
         /* 隐私模式下忽略 */
       }
-      reloadApp();
+      closeInviteSettings();
+      await applyInvite(result);
+      tip('邀请码已切换');
       return;
     }
     if (msg) msg.textContent = result.reason || '邀请码无效';
@@ -1107,7 +1110,9 @@ async function onClick(event) {
     } catch {
       /* 隐私模式下忽略 */
     }
-    reloadApp();
+    closeInviteSettings();
+    const result = await openGateForInvite('邀请码已清除，请输入新邀请码');
+    if (result && result.ok) await applyInvite(result);
     return;
   }
   if (target.closest('[data-close-settings]') || target.hasAttribute('data-settings-mask')) {
@@ -1206,12 +1211,8 @@ function resyncViewport() {
   for (const delay of [60, 200, 500, 1000]) window.setTimeout(syncAppHeight, delay);
 }
 
-/** 只在用户主动切换邀请码时重载，日常翻页不再自动刷新。 */
-function reloadApp() {
-  window.location.reload();
-}
-
 const INVITE_KEY = 'weibo-showcase-invite-v1';
+let gateResolver = null;
 
 function showGate(message = '') {
   if (!el.gate) return;
@@ -1272,36 +1273,19 @@ async function requireInvite() {
       }
     }
   }
-  if (!el.gate || !el.gateBtn || !el.gateInput) return { ok: true, scope: 'all', accounts: [] };
-  showGate(initialMessage);
+  return openGateForInvite(initialMessage);
+}
+
+/** 显示邀请码输入层，返回校验通过后的结果（不刷新页面）。 */
+function openGateForInvite(message = '') {
+  if (!el.gate || !el.gateBtn || !el.gateInput) return Promise.resolve({ ok: true, scope: 'all', accounts: [] });
+  showGate(message);
+  el.gateInput.value = '';
+  el.gateMsg.textContent = message;
+  el.gateBtn.disabled = false;
+  window.setTimeout(() => el.gateInput.focus(), 50);
   return new Promise((resolve) => {
-    const submit = async () => {
-      const code = el.gateInput.value.trim();
-      if (!code) {
-        el.gateMsg.textContent = '请输入邀请码';
-        return;
-      }
-      el.gateBtn.disabled = true;
-      el.gateMsg.textContent = '验证中…';
-      const result = await verifyInvite(code);
-      if (result.ok) {
-        try {
-          localStorage.setItem(INVITE_KEY, code);
-        } catch {
-          /* 隐私模式下本次仍可访问 */
-        }
-        hideGate();
-        resolve(result);
-        return;
-      }
-      el.gateMsg.textContent = result.reason || '邀请码无效';
-      el.gateBtn.disabled = false;
-      el.gateInput.focus();
-    };
-    el.gateBtn.addEventListener('click', submit);
-    el.gateInput.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') submit();
-    });
+    gateResolver = resolve;
   });
 }
 
@@ -1357,6 +1341,19 @@ function filterUsersByInvite(users) {
   return users.filter((user) => allowed.has(String(user.uid)));
 }
 
+/** 切换/重新输入邀请码后就地重算可见账号，不走整页刷新。 */
+async function applyInvite(invite) {
+  state.invite = invite;
+  if (state.allUsers.length) {
+    state.users = filterUsersByInvite(state.allUsers);
+    if (!state.users.some((user) => user.uid === state.uid)) {
+      state.uid = state.users[0] ? state.users[0].uid : null;
+      state.unread = null;
+    }
+  }
+  render();
+}
+
 async function boot() {
   el.navbar = document.getElementById('navbar');
   el.screen = document.getElementById('screen');
@@ -1377,6 +1374,39 @@ async function boot() {
   el.gateBtn = document.getElementById('gateBtn');
   el.gateMsg = document.getElementById('gateMsg');
   el.settingsRoot = document.getElementById('settingsRoot');
+
+  if (el.gateBtn && el.gateInput) {
+    const submitGate = async () => {
+      if (el.gateBtn.disabled) return;
+      const code = el.gateInput.value.trim();
+      if (!code) {
+        el.gateMsg.textContent = '请输入邀请码';
+        return;
+      }
+      el.gateBtn.disabled = true;
+      el.gateMsg.textContent = '验证中…';
+      const result = await verifyInvite(code);
+      if (result.ok) {
+        try {
+          localStorage.setItem(INVITE_KEY, code);
+        } catch {
+          /* 隐私模式下本次仍可访问 */
+        }
+        hideGate();
+        const resolve = gateResolver;
+        gateResolver = null;
+        if (resolve) resolve(result);
+        return;
+      }
+      el.gateMsg.textContent = result.reason || '邀请码无效';
+      el.gateBtn.disabled = false;
+      el.gateInput.focus();
+    };
+    el.gateBtn.addEventListener('click', submitGate);
+    el.gateInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') submitGate();
+    });
+  }
 
   tickClock();
   setInterval(tickClock, 30000);
@@ -1418,10 +1448,11 @@ async function boot() {
   try {
     const [users, profiles] = await Promise.all([loadUsers(), loadProfiles()]);
     // users.json 可能是旧快照（昵称仍为“用户<uid>”），以 profiles 里的真实昵称为准
-    state.users = filterUsersByInvite(users).map((user) => {
+    state.allUsers = users.map((user) => {
       const profile = profiles[String(user.uid)];
       return profile && profile.screenName ? { ...user, screenName: profile.screenName } : user;
     });
+    state.users = filterUsersByInvite(state.allUsers);
     state.profiles = profiles;
   } catch (err) {
     setScreen(errorHtml(err));
