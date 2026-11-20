@@ -42,6 +42,13 @@
   <nav class="tabbar" id="tabbar" aria-label="底部导航"></nav>
   <div class="settings-root" id="settingsRoot"></div>
   <div class="thread-root" id="threadRoot"></div>
+  <div class="image-viewer" id="imageViewer" hidden>
+    <button class="image-viewer-close" type="button" data-image-close aria-label="关闭">×</button>
+    <div class="image-viewer-stage" id="imageViewerStage">
+      <img id="imageViewerImg" alt="">
+    </div>
+    <div class="image-viewer-hint">双指缩放 · 双击放大</div>
+  </div>
   <div class="gate" id="gate" hidden>
     <div class="gate-inner">
       <img class="gate-logo" src="icons/fake-weibo-192.png" alt="">

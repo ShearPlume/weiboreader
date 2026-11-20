@@ -982,9 +982,9 @@ function postPicsHtml(pics, compact = false) {
   const cells = list
     .map(
       (pic) =>
-        `<a class="post-pic" href="${esc(weiboImageUrl(pic.large || pic.thumb))}" target="_blank" rel="noopener"><img src="${esc(
-          weiboImageUrl(pic.thumb || pic.large)
-        )}" alt="" loading="lazy"></a>`
+        `<a class="post-pic" href="${esc(weiboImageUrl(pic.large || pic.thumb))}" data-image="${esc(
+          weiboImageUrl(pic.large || pic.thumb)
+        )}" target="_blank" rel="noopener"><img src="${esc(weiboImageUrl(pic.thumb || pic.large))}" alt="" loading="lazy"></a>`
     )
     .join('');
   return `<div class="post-pics ${compact ? 'compact ' : ''}${cls}">${cells}</div>`;
@@ -1202,6 +1202,109 @@ function switchUser(uid) {
   tip(`已切换到 ${user.screenName || uid}`);
 }
 
+const imageView = {
+  scale: 1,
+  x: 0,
+  y: 0,
+  startDist: 0,
+  startScale: 1,
+  startX: 0,
+  startY: 0,
+  baseX: 0,
+  baseY: 0,
+  lastTap: 0,
+  moved: false,
+};
+
+function applyImageView(animate = false) {
+  if (!el.imageViewerImg) return;
+  el.imageViewerImg.style.transition = animate ? 'transform 0.16s ease' : 'none';
+  el.imageViewerImg.style.transform = `translate(${imageView.x}px, ${imageView.y}px) scale(${imageView.scale})`;
+}
+
+function resetImageView() {
+  imageView.scale = 1;
+  imageView.x = 0;
+  imageView.y = 0;
+  imageView.moved = false;
+  applyImageView();
+}
+
+function openImageViewer(url) {
+  if (!url || !el.imageViewer || !el.imageViewerImg) return;
+  resetImageView();
+  el.imageViewerImg.src = url;
+  el.imageViewer.hidden = false;
+}
+
+function closeImageViewer() {
+  if (!el.imageViewer) return;
+  el.imageViewer.hidden = true;
+  if (el.imageViewerImg) el.imageViewerImg.removeAttribute('src');
+  resetImageView();
+}
+
+function viewerDistance(touches) {
+  const dx = touches[0].clientX - touches[1].clientX;
+  const dy = touches[0].clientY - touches[1].clientY;
+  return Math.hypot(dx, dy);
+}
+
+function onViewerTouchStart(event) {
+  if (event.touches.length === 2) {
+    event.preventDefault();
+    imageView.startDist = viewerDistance(event.touches);
+    imageView.startScale = imageView.scale;
+    imageView.moved = true;
+  } else if (event.touches.length === 1 && imageView.scale > 1) {
+    imageView.startX = event.touches[0].clientX;
+    imageView.startY = event.touches[0].clientY;
+    imageView.baseX = imageView.x;
+    imageView.baseY = imageView.y;
+    imageView.moved = true;
+  }
+}
+
+function onViewerTouchMove(event) {
+  if (event.touches.length === 2) {
+    event.preventDefault();
+    if (!imageView.startDist) {
+      imageView.startDist = viewerDistance(event.touches);
+      imageView.startScale = imageView.scale;
+    }
+    const ratio = viewerDistance(event.touches) / imageView.startDist;
+    imageView.scale = Math.min(5, Math.max(1, imageView.startScale * ratio));
+    applyImageView();
+  } else if (event.touches.length === 1 && imageView.scale > 1) {
+    event.preventDefault();
+    imageView.x = imageView.baseX + event.touches[0].clientX - imageView.startX;
+    imageView.y = imageView.baseY + event.touches[0].clientY - imageView.startY;
+    applyImageView();
+  }
+}
+
+function onViewerTouchEnd(event) {
+  imageView.startDist = 0;
+  if (event.touches.length) return;
+  if (imageView.scale <= 1.02) {
+    imageView.scale = 1;
+    imageView.x = 0;
+    imageView.y = 0;
+    applyImageView(true);
+  }
+  const now = Date.now();
+  if (!imageView.moved && now - imageView.lastTap < 300) {
+    imageView.scale = imageView.scale > 1.2 ? 1 : 2;
+    imageView.x = 0;
+    imageView.y = 0;
+    applyImageView(true);
+    imageView.lastTap = 0;
+  } else {
+    imageView.lastTap = now;
+  }
+  imageView.moved = false;
+}
+
 async function onClick(event) {
   const target = event.target instanceof Element ? event.target : null;
   if (!target) return;
@@ -1216,6 +1319,16 @@ async function onClick(event) {
     }
   }
 
+  if (target.closest('[data-image-close]')) {
+    closeImageViewer();
+    return;
+  }
+  const imageLink = target.closest('[data-image]');
+  if (imageLink) {
+    event.preventDefault();
+    openImageViewer(imageLink.dataset.image);
+    return;
+  }
   if (target.closest('[data-thread-close]')) {
     closeThread();
     return;
@@ -1526,6 +1639,9 @@ async function boot() {
   el.tabbar = document.getElementById('tabbar');
   el.overlay = document.getElementById('overlayRoot');
   el.threadRoot = document.getElementById('threadRoot');
+  el.imageViewer = document.getElementById('imageViewer');
+  el.imageViewerStage = document.getElementById('imageViewerStage');
+  el.imageViewerImg = document.getElementById('imageViewerImg');
   el.tip = document.getElementById('floatTip');
   el.fsBtn = document.getElementById('fsBtn');
   if (el.fsBtn) {
@@ -1593,8 +1709,28 @@ async function boot() {
   });
   window.addEventListener('focus', resyncViewport);
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') closeThread();
+    if (event.key === 'Escape') {
+      closeImageViewer();
+      closeThread();
+    }
   });
+  if (el.imageViewerStage) {
+    el.imageViewerStage.addEventListener('touchstart', onViewerTouchStart, { passive: false });
+    el.imageViewerStage.addEventListener('touchmove', onViewerTouchMove, { passive: false });
+    el.imageViewerStage.addEventListener('touchend', onViewerTouchEnd);
+    el.imageViewerStage.addEventListener('click', (event) => {
+      if (event.target === el.imageViewerStage) closeImageViewer();
+    });
+    el.imageViewerStage.addEventListener(
+      'wheel',
+      (event) => {
+        event.preventDefault();
+        imageView.scale = Math.min(5, Math.max(1, imageView.scale * (event.deltaY < 0 ? 1.12 : 0.9)));
+        applyImageView();
+      },
+      { passive: false }
+    );
+  }
   window.addEventListener('popstate', (event) => {
     const key = event.state && event.state.thread;
     if (key) {
