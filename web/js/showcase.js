@@ -253,7 +253,9 @@ const IS_STANDALONE =
 function externalLinkAttrs(href) {
   const value = String(href || '');
   if (!value) return '';
-  return `href="${esc(value)}" target="${IS_MOBILE ? '_self' : '_blank'}" rel="noopener"`;
+  // 独立窗口里用 _blank：不要在 PWA 自己的 webview 里打开微博，
+  // 否则 iOS 从应用内浏览器返回时会把 webview 高度改小，底部出现空白。
+  return `href="${esc(value)}" target="_blank" rel="noopener"`;
 }
 
 /** 用户主页（m.weibo.cn 在手机上可唤起微博 App）。 */
