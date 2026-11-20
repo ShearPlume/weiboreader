@@ -723,6 +723,46 @@ async function hPricing(ctx) {
 /* --- 导入导出 / 演示 --- */
 
 /** 用户资料缓存（展示页专用；只读，不触发微博请求）。 */
+/** 展示页：读取某账号最近微博快照（data/posts/<uid>.json）。 */
+async function hShowcasePosts(ctx) {
+  const uid = String(ctx.params[0] || '');
+  if (!/^\d{1,20}$/.test(uid)) throw new AppError('BAD_REQUEST', 'UID 不合法', 400);
+  const file = path.join(PROJECT_ROOT, 'data', 'posts', `${uid}.json`);
+  if (!fs.existsSync(file)) throw new AppError('NOT_FOUND', '该账号还没有微博快照', 404);
+  return JSON.parse(fs.readFileSync(file, 'utf8'));
+}
+
+/** 展示页：微博图床代理（sinaimg 要求 m.weibo.cn Referer，浏览器直连会 403）。 */
+async function hShowcaseImage(ctx) {
+  const raw = String(ctx.query.get('u') || '');
+  let target;
+  try {
+    target = new URL(raw);
+  } catch {
+    throw new AppError('BAD_REQUEST', '图片地址不合法', 400);
+  }
+  const host = target.hostname.toLowerCase();
+  if (target.protocol !== 'https:' || !(host === 'sinaimg.cn' || host.endsWith('.sinaimg.cn'))) {
+    throw new AppError('BAD_REQUEST', '只允许代理微博图床', 400);
+  }
+  const upstream = await fetch(target.href, {
+    headers: {
+      Referer: 'https://m.weibo.cn/',
+      'User-Agent':
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1',
+    },
+  });
+  if (!upstream.ok) throw new AppError('NOT_FOUND', '微博图片读取失败', 404);
+  const body = Buffer.from(await upstream.arrayBuffer());
+  ctx.res.writeHead(200, {
+    'Content-Type': upstream.headers.get('content-type') || 'image/jpeg',
+    'Content-Length': body.length,
+    'Cache-Control': 'public, max-age=604800',
+    'X-Content-Type-Options': 'nosniff',
+  });
+  ctx.res.end(body);
+}
+
 async function hProfiles() {
   return { items: profiles.loadProfiles() };
 }
@@ -989,6 +1029,8 @@ const ROUTES = [
   ['GET', /^\/api\/profiles$/, hProfiles],
   ['GET', /^\/api\/showcase\/status$/, hShowcaseStatus],
   ['POST', /^\/api\/showcase\/publish$/, hShowcasePublish],
+  ['GET', /^\/api\/showcase\/posts\/(\d+)$/, hShowcasePosts],
+  ['GET', /^\/api\/showcase\/image$/, hShowcaseImage],
   ['GET', /^\/api\/showcase\/invite\/verify$/, hInviteVerify],
   ['GET', /^\/api\/invites$/, hInvitesList],
   ['POST', /^\/api\/invites$/, hInviteCreate],

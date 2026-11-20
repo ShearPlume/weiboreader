@@ -367,6 +367,14 @@ async function main() {
       },
     ];
 
+    for (const user of targets) {
+      const uid = String(user.uid);
+      const postsFile = path.join(dataDir, 'posts', `${uid}.json`);
+      if (fs.existsSync(postsFile)) {
+        dataJobs.push({ key: `${opts.prefix}posts/${uid}.json`, body: fs.readFileSync(postsFile) });
+      }
+    }
+
     let recordFiles = 0;
     for (const user of targets) {
       const uid = String(user.uid);

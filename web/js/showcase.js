@@ -140,8 +140,10 @@ const state = {
   route: 'messages',
   menu: null,
   option: { at: 'all-posts', comments: 'all' },
+  postFilter: 'all',
   unread: null,
   cache: new Map(),
+  postCache: new Map(),
   records: new Map(),
   threadPushed: false,
   seq: 0,
@@ -171,6 +173,30 @@ async function loadProfiles() {
   } catch {
     return {};
   }
+}
+
+/** 某账号最近微博：优先 CDN 快照，缺失时回落本地 API。 */
+function loadPosts(uid) {
+  const key = String(uid);
+  if (!state.postCache.has(key)) {
+    const pending = (async () => {
+      const staticDoc = await fetchStatic(`posts/${encodeURIComponent(key)}.json`);
+      if (staticDoc && Array.isArray(staticDoc.items)) return staticDoc;
+      return await api(`${API_ROOT}api/showcase/posts/${encodeURIComponent(key)}`);
+    })().catch((err) => {
+      state.postCache.delete(key);
+      throw err;
+    });
+    state.postCache.set(key, pending);
+  }
+  return state.postCache.get(key);
+}
+
+/** 微博图床必须带 m.weibo.cn Referer，统一走本机代理。 */
+function weiboImageUrl(url) {
+  const value = String(url || '');
+  if (!value) return '';
+  return `${API_ROOT}api/showcase/image?u=${encodeURIComponent(value)}`;
 }
 
 /** 读取某账号某模式的记录：优先 CDN 静态快照，缺失时回落本地 API（同参数只请求一次）。 */
@@ -365,6 +391,7 @@ function currentRoute() {
 function activeTab() {
   const route = state.route;
   if (route === 'messages' || route === 'at' || route === 'comments' || route === 'likes') return 'messages';
+  if (route === 'posts') return 'me';
   return route;
 }
 
@@ -394,6 +421,14 @@ function renderNavbar() {
         ${esc(active.label)}${ICON.caret}
       </button>
       <button class="nav-right-text" type="button" data-demo>设置</button>`;
+    return;
+  }
+
+  if (state.route === 'posts') {
+    el.navbar.innerHTML = `
+      <button class="nav-back" type="button" data-nav="me" aria-label="返回">${ICON.back}</button>
+      <span class="nav-title-btn">微博</span>
+      <button class="icon-btn nav-right-text" type="button" data-invite-settings aria-label="设置">${ICON.gear}</button>`;
     return;
   }
 
@@ -777,8 +812,11 @@ function statText(value) {
   return n.toLocaleString('zh-CN');
 }
 
-function numCell(value, label) {
-  return `<div class="me-num"><b>${esc(statText(value))}</b><span>${esc(label)}</span></div>`;
+function numCell(value, label, route = '') {
+  const inner = `<b>${esc(statText(value))}</b><span>${esc(label)}</span>`;
+  return route
+    ? `<button class="me-num me-num-link" type="button" data-nav="${esc(route)}">${inner}</button>`
+    : `<div class="me-num">${inner}</div>`;
 }
 
 function dateTimeText(ms) {
@@ -853,7 +891,7 @@ async function buildMe() {
     : '';
 
   const statsRow = `<div class="me-stat-row">
-    ${numCell(profile ? profile.statuses : null, '微博')}
+    ${numCell(profile ? profile.statuses : null, '微博', 'posts')}
     ${numCell(profile ? profile.friends : null, '关注')}
     ${numCell(profile ? profile.followers : null, '粉丝')}
     ${numCell(recordCount, '归档')}
@@ -929,6 +967,107 @@ async function buildMe() {
     </div>`;
 }
 
+const POST_TABS = [
+  { key: 'all', label: '全部' },
+  { key: 'origin', label: '原创', filter: (rec) => !rec.retweeted },
+  { key: 'image', label: '图片', filter: (rec) => (rec.pics || []).length > 0 },
+  { key: 'video', label: '视频', filter: (rec) => rec.pageInfo && rec.pageInfo.type === 'video' },
+];
+
+function postPicsHtml(pics, compact = false) {
+  const list = Array.isArray(pics) ? pics : [];
+  if (!list.length) return '';
+  const cls = list.length === 1 ? 'p1' : list.length === 2 ? 'p2' : list.length === 3 ? 'p3' : 'pn';
+  const cells = list
+    .map(
+      (pic) =>
+        `<a class="post-pic" href="${esc(weiboImageUrl(pic.large || pic.thumb))}" target="_blank" rel="noopener"><img src="${esc(
+          weiboImageUrl(pic.thumb || pic.large)
+        )}" alt="" loading="lazy"></a>`
+    )
+    .join('');
+  return `<div class="post-pics ${compact ? 'compact ' : ''}${cls}">${cells}</div>`;
+}
+
+function postPageInfoHtml(info) {
+  if (!info || (!info.url && !info.title && !info.pic)) return '';
+  const type = String(info.type || '');
+  const pic = info.pic
+    ? `<span class="post-link-pic"><img src="${esc(weiboImageUrl(info.pic))}" alt="" loading="lazy">${
+        type === 'video' ? '<i class="post-play"></i>' : ''
+      }</span>`
+    : '';
+  const title = info.title || info.content1 || '微博链接';
+  const sub = info.content2 || (type === 'video' ? '视频' : '');
+  return `<a class="post-linkcard" ${externalLinkAttrs(info.url)}>
+    ${pic}
+    <span class="post-link-main"><b>${esc(title)}</b>${sub ? `<span>${esc(sub)}</span>` : ''}</span>
+  </a>`;
+}
+
+function postCardHtml(rec) {
+  const name = rec.author || '微博用户';
+  return `<article class="post-card">
+    ${rec.isTop ? '<div class="post-pin">置顶</div>' : ''}
+    <div class="post-head">
+      ${avatarLink(rec.authorUid, avatarHtml(name, rec.authorUid || name, 40))}
+      <div class="post-head-main">
+        <div class="post-name-row">
+          <a class="post-name" ${externalLinkAttrs(profileHref(rec.authorUid))}>${esc(name)}</a>
+          ${threadVerified(rec.authorUid)}
+        </div>
+        <div class="post-meta"><span>${esc(feedTime(rec.createdAtMs))}</span>${
+          rec.source ? `<span>来自 ${esc(rec.source)}</span>` : ''
+        }</div>
+      </div>
+    </div>
+    ${rec.text ? `<a class="post-text" ${externalLinkAttrs(`https://m.weibo.cn/detail/${rec.id}`)}>${richText(rec.text)}</a>` : ''}
+    ${postPicsHtml(rec.pics)}
+    ${postPageInfoHtml(rec.pageInfo)}
+    ${
+      rec.retweeted
+        ? `<div class="post-retweet">
+            <a class="post-rt-name" ${externalLinkAttrs(profileHref(rec.retweeted.uid))}>@${esc(
+              rec.retweeted.userName || '微博用户'
+            )}</a>
+            <div class="post-rt-text">${richText(rec.retweeted.text)}</div>
+            ${postPicsHtml(rec.retweeted.pics, true)}
+          </div>`
+        : ''
+    }
+    <div class="post-actions">
+      <button class="post-act" type="button" data-demo>${ICON.forward}<span>${rec.reposts || '转发'}</span></button>
+      <button class="post-act" type="button" data-demo>${ICON.reply}<span>${rec.comments || '评论'}</span></button>
+      <button class="post-act" type="button" data-demo>${ICON.thumb}<span>${rec.likes || '赞'}</span></button>
+    </div>
+  </article>`;
+}
+
+async function buildPosts() {
+  const user = state.users.find((item) => item.uid === state.uid);
+  if (!user) return noUsersHtml();
+  const doc = await loadPosts(state.uid);
+  const items = Array.isArray(doc.items) ? doc.items : [];
+  const profile = state.profiles[String(state.uid)] || null;
+  const author = (profile && profile.screenName) || doc.screenName || user.screenName || '微博用户';
+  const active = POST_TABS.find((tab) => tab.key === state.postFilter) || POST_TABS[0];
+  const shown = active.filter ? items.filter(active.filter) : items;
+  const total = Number(doc.total) || items.length;
+  const tabs = POST_TABS.map(
+    (tab) => `<button class="posts-tab${tab.key === active.key ? ' active' : ''}" type="button" data-post-tab="${tab.key}">${tab.label}</button>`
+  ).join('');
+  if (!items.length) return emptyHtml(ICON.home, '暂无微博', '该账号还没有拉取到微博内容。');
+  const list = shown.length
+    ? shown.map((rec) => postCardHtml({ ...rec, author, authorUid: state.uid })).join('')
+    : '<p class="page-note">这个分类下暂时没有微博。</p>';
+  return `<div class="posts-page">
+    <div class="posts-tabs">${tabs}</div>
+    <div class="posts-search">${ICON.search}<span>搜我的微博</span></div>
+    <div class="posts-summary"><span>${esc(active.label)}微博 (${total})</span><span>筛选</span></div>
+    <div class="post-list">${list}</div>
+  </div>`;
+}
+
 function buildPlaceholder(icon, title, text) {
   return `<div class="empty">
     <div class="empty-ico">${icon}</div>
@@ -943,6 +1082,7 @@ const SCREENS = {
   at: () => buildFeed('at'),
   comments: () => buildFeed('comments'),
   likes: async () => buildLikes(),
+  posts: async () => buildPosts(),
   me: async () => buildMe(),
   home: async () => buildPlaceholder(ICON.home, '首页', '展示页目前还原「消息」与「我」，首页信息流不在本地归档范围内。'),
   video: async () => buildPlaceholder(ICON.video, '视频', '视频页不在本地归档范围内。'),
@@ -991,7 +1131,7 @@ function setScreen(markup) {
   el.screen.scrollTop = 0;
 }
 
-const ROUTE_DEPTH = { messages: 0, me: 0, home: 0, video: 0, discover: 0, likes: 1, at: 1, comments: 1 };
+const ROUTE_DEPTH = { messages: 0, me: 0, home: 0, video: 0, discover: 0, likes: 1, at: 1, comments: 1, posts: 1 };
 
 function animateScreen(direction) {
   el.screen.classList.remove('anim-forward', 'anim-back');
@@ -1051,6 +1191,7 @@ function switchUser(uid) {
   if (!user) return;
   state.uid = uid;
   state.unread = null;
+  state.postFilter = 'all';
   try {
     localStorage.setItem(STORAGE_KEY, uid);
   } catch {
@@ -1146,6 +1287,12 @@ async function onClick(event) {
     state.menu = state.menu === kind ? null : kind;
     renderNavbar();
     renderOverlay();
+    return;
+  }
+  const postTab = target.closest('[data-post-tab]');
+  if (postTab) {
+    state.postFilter = postTab.dataset.postTab || 'all';
+    renderScreen();
     return;
   }
   const optionBtn = target.closest('[data-opt]');
