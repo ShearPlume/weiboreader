@@ -1187,8 +1187,28 @@ function tickClock() {
 /** iOS 独立窗口切走再回来后视口高度会变化，重新计算并锁定 --app-height。 */
 let appHeight = 0;
 let appTop = 0;
+let pwaHeightSet = 0;
+
+/** 独立窗口返回后 100vh 也可能偏矮，用物理屏高兜底；差值小时不启用，避免把底部栏顶出去。 */
+function syncPwaHeight() {
+  if (!IS_STANDALONE || !IS_IOS) return;
+  const screenHeight = window.screen.height || 0;
+  const inner = window.innerHeight || 0;
+  if (screenHeight <= 0) return;
+  const gap = screenHeight - inner;
+  if (gap > 80) {
+    if (pwaHeightSet !== screenHeight) {
+      pwaHeightSet = screenHeight;
+      document.documentElement.style.setProperty('--pwa-height', `${screenHeight}px`);
+    }
+  } else if (gap < 40 && pwaHeightSet) {
+    pwaHeightSet = 0;
+    document.documentElement.style.removeProperty('--pwa-height');
+  }
+}
 
 function syncAppHeight() {
+  syncPwaHeight();
   const viewport = window.visualViewport;
   const inner = window.innerHeight || 0;
   let height = inner;

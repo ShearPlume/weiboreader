@@ -274,7 +274,8 @@ button {
 
 /* 内容区 */
 .screen {
-  flex: 1;
+  flex: 1 1 0;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   background: #fff;
@@ -1488,7 +1489,15 @@ body.is-fullscreen .statusbar {
 
 /* iOS 独立窗口：安全区由外层承担，避免内容顶到状态栏下面被系统材质模糊 */
 @media (display-mode: standalone) {
+  /* 独立窗口没有浏览器工具栏，100vh 是稳定整屏高度；返回后 innerHeight/visualViewport 会报矮 */
+  html,
+  body,
   .phone {
+    height: max(100vh, var(--pwa-height, 100vh));
+  }
+
+  .phone {
+    top: 0;
     padding-top: env(safe-area-inset-top, 0px);
   }
 
