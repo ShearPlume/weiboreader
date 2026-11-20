@@ -1131,7 +1131,12 @@ async function boot() {
   syncAppHeight();
   window.addEventListener('resize', syncAppHeight);
   window.addEventListener('orientationchange', syncAppHeight);
-  window.addEventListener('pageshow', () => {
+  window.addEventListener('pageshow', (event) => {
+    // 从微博/应用内浏览器返回时 iOS 可能用 bfcache 恢复旧视口，直接重载最稳
+    if (event.persisted) {
+      window.location.reload();
+      return;
+    }
     syncAppHeight();
     window.setTimeout(() => {
       window.scrollTo(0, 0);

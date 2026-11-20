@@ -866,8 +866,21 @@ async function hInviteCreate(ctx) {
 
 async function hInvitePatch(ctx) {
   const body = ctx.body || {};
-  const invite = invites.setEnabled(ctx.params[0], body.enabled);
-  if (!invite) throw new AppError('NOT_FOUND', '邀请码不存在', 404);
+  let invite = null;
+  if (body.scope !== undefined) {
+    const scope = ['default', 'all', 'selected'].includes(body.scope) ? body.scope : 'default';
+    const accounts = Array.isArray(body.accounts) ? body.accounts : [];
+    if (scope === 'selected' && !accounts.some((uid) => /^\d{1,20}$/.test(String(uid)))) {
+      throw new AppError('BAD_REQUEST', '指定账号范围时请至少选择一个账号', 400);
+    }
+    invite = invites.updateScope(ctx.params[0], scope, accounts);
+    if (!invite) throw new AppError('NOT_FOUND', '邀请码不存在', 404);
+  }
+  if (body.enabled !== undefined) {
+    invite = invites.setEnabled(ctx.params[0], body.enabled);
+    if (!invite) throw new AppError('NOT_FOUND', '邀请码不存在', 404);
+  }
+  if (!invite) throw new AppError('BAD_REQUEST', '没有可修改的字段', 400);
   return { invite };
 }
 

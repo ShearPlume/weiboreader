@@ -124,6 +124,23 @@ export function setEnabled(code, enabled) {
   return dto(entry);
 }
 
+/** 修改可见范围（复用新建邀请码的范围字段）。 */
+export function updateScope(code, scope, accounts) {
+  const doc = read();
+  const entry = doc.codes[normalize(code)];
+  if (!entry) return null;
+  const normalizedScope = scope === 'all' ? 'all' : scope === 'selected' ? 'selected' : 'default';
+  entry.scope = normalizedScope;
+  entry.accounts =
+    normalizedScope === 'selected'
+      ? normalizeAccounts(accounts)
+      : normalizedScope === 'default'
+        ? [...DEFAULT_SCOPE_ACCOUNTS]
+        : [];
+  write(doc);
+  return dto(entry);
+}
+
 /** 删除。 */
 export function remove(code) {
   const doc = read();

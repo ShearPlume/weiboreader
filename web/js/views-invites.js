@@ -36,6 +36,7 @@ function rowHtml(invite) {
     <td><span class="badge ${meta.cls}">${meta.label}</span></td>
     <td class="tiny">${esc(fmtTime(invite.createdAtMs))}<br>${esc(expires)}</td>
     <td style="white-space:nowrap">
+      <button class="btn btn-sm" type="button" data-scope="${esc(invite.code)}">范围</button>
       <button class="btn btn-sm" type="button" data-copy="${esc(invite.code)}">复制</button>
       <button class="btn btn-sm" type="button" data-toggle="${esc(invite.code)}" data-enabled="${invite.enabled ? '1' : '0'}">${invite.enabled ? '停用' : '启用'}</button>
       <button class="btn btn-sm" type="button" data-del="${esc(invite.code)}">删除</button>
@@ -166,9 +167,101 @@ export async function renderInvites(root) {
     }
   });
 
+  const openScopeEditor = (invite) => {
+    if (!invite) return;
+    const modalRoot = document.getElementById('modalRoot');
+    if (!modalRoot) return;
+    const currentScope = invite.scope || 'all';
+    const currentAccounts = new Set((invite.accounts || []).map(String));
+    const accountChecks = users
+      .map(
+        (user) =>
+          `<label class="checkbox" style="height:auto"><input type="checkbox" class="edit-account" value="${esc(
+            user.uid
+          )}" ${currentAccounts.has(String(user.uid)) ? 'checked' : ''}> ${esc(user.screenName || user.uid)} <span class="tiny mono">${esc(user.uid)}</span></label>`
+      )
+      .join('');
+    modalRoot.innerHTML = `
+      <div class="modal-mask">
+        <div class="modal">
+          <h3>修改可见范围</h3>
+          <div class="modal-desc">邀请码 <code class="mono">${esc(invite.code)}</code></div>
+          <div class="field" style="margin-top:12px">
+            <label for="editScope">可见范围</label>
+            <select class="select" id="editScope">
+              <option value="default" ${currentScope === 'default' ? 'selected' : ''}>仅测试账号（${esc(testLabel)}）</option>
+              <option value="all" ${currentScope === 'all' ? 'selected' : ''}>全部账号</option>
+              <option value="selected" ${currentScope === 'selected' ? 'selected' : ''}>指定账号…</option>
+            </select>
+          </div>
+          <div class="field" id="editAccountsWrap" style="display:none">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+              <label>选择可见账号</label>
+              <span style="display:flex;gap:6px">
+                <button class="btn btn-sm" type="button" id="editAll">全选</button>
+                <button class="btn btn-sm" type="button" id="editInvert">反选</button>
+              </span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:8px">${accountChecks}</div>
+          </div>
+          <div class="form-error" id="editErr" style="min-height:18px"></div>
+          <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+            <button class="btn" type="button" id="editCancel">取消</button>
+            <button class="btn btn-primary" type="button" id="editSave">保存</button>
+          </div>
+        </div>
+      </div>`;
+    const modal = modalRoot.querySelector('.modal');
+    const scopeSelect = modal.querySelector('#editScope');
+    const accountsWrap = modal.querySelector('#editAccountsWrap');
+    const errBox = modal.querySelector('#editErr');
+    const syncWrap = () => {
+      accountsWrap.style.display = scopeSelect.value === 'selected' ? '' : 'none';
+    };
+    scopeSelect.addEventListener('change', syncWrap);
+    syncWrap();
+    const close = () => {
+      modalRoot.innerHTML = '';
+    };
+    modal.querySelector('#editCancel').addEventListener('click', close);
+    modal.querySelector('#editAll').addEventListener('click', () => {
+      for (const input of modal.querySelectorAll('.edit-account')) input.checked = true;
+    });
+    modal.querySelector('#editInvert').addEventListener('click', () => {
+      for (const input of modal.querySelectorAll('.edit-account')) input.checked = !input.checked;
+    });
+    modal.querySelector('#editSave').addEventListener('click', async () => {
+      const scope = scopeSelect.value;
+      const accounts = [...modal.querySelectorAll('.edit-account:checked')].map((input) => input.value);
+      if (scope === 'selected' && accounts.length === 0) {
+        errBox.textContent = '请至少选择一个账号';
+        return;
+      }
+      const saveBtn = modal.querySelector('#editSave');
+      saveBtn.disabled = true;
+      try {
+        await api(`/api/invites/${encodeURIComponent(invite.code)}`, {
+          method: 'PATCH',
+          body: { scope, accounts },
+        });
+        close();
+        await renderInvites(root);
+        toast('可见范围已更新', 'ok');
+      } catch (err) {
+        errBox.textContent = err && err.message ? err.message : '保存失败';
+        saveBtn.disabled = false;
+      }
+    });
+  };
+
   root.onclick = async (event) => {
     const target = event.target.closest('button');
     if (!target) return;
+    const scopeCode = target.dataset.scope;
+    if (scopeCode) {
+      openScopeEditor(items.find((invite) => invite.code === scopeCode));
+      return;
+    }
     if (target.id === 'invAll') {
       for (const input of root.querySelectorAll('.inv-account')) input.checked = true;
       return;
