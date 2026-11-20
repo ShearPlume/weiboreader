@@ -759,18 +759,23 @@ async function hShowcaseImage(ctx) {
     }
   }
   let upstream = null;
-  for (const candidate of candidates) {
-    const response = await fetch(candidate, {
-      headers: {
-        Referer: 'https://m.weibo.cn/',
-        'User-Agent':
-          'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1',
-      },
-    });
-    if (response.ok) {
-      upstream = response;
-      break;
+  for (const referer of ['https://m.weibo.cn/', 'https://weibo.com/']) {
+    for (const candidate of candidates) {
+      const response = await fetch(candidate, {
+        headers: {
+          Referer: referer,
+          Accept: 'application/json, text/plain, */*',
+          'X-Requested-With': 'XMLHttpRequest',
+          'User-Agent':
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1',
+        },
+      });
+      if (response.ok) {
+        upstream = response;
+        break;
+      }
     }
+    if (upstream) break;
   }
   if (!upstream) throw new AppError('NOT_FOUND', '微博图片读取失败', 404);
   const body = Buffer.from(await upstream.arrayBuffer());
