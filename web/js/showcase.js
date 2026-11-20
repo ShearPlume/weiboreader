@@ -259,10 +259,11 @@ const IS_STANDALONE =
 function externalLinkAttrs(href) {
   const value = String(href || '');
   if (!value) return '';
-  // 主屏幕应用不要用 _self：左下角返回会进入内嵌浏览器副本，视口被永久压小。
-  // 新窗口打开后没有展示页历史，只能点 X 关闭，回到的仍是完整 PWA。
-  const target = IS_STANDALONE ? '_blank' : IS_MOBILE ? '_self' : '_blank';
-  return `href="${esc(value)}" target="${target}" rel="noopener"`;
+  // 主屏幕应用里点击时用 location.replace：保持微博页正常加载图片，
+  // 同时把展示页从内嵌浏览器历史里替换掉，避免左下角返回进入压小的副本。
+  const target = IS_MOBILE ? '_self' : '_blank';
+  const marker = IS_STANDALONE ? ' data-external="1"' : '';
+  return `href="${esc(value)}" target="${target}" rel="noopener"${marker}`;
 }
 
 /** 用户主页（m.weibo.cn 在手机上可唤起微博 App）。 */
@@ -694,14 +695,12 @@ function renderThread(top, replies) {
 
 function closeThread(fromHistory = false) {
   if (!el.threadRoot) return;
-  // 自己点返回时消费掉 pushState 的历史记录，交给 popstate 真正关闭
-  if (!fromHistory && state.threadPushed) {
-    history.back();
-    return;
-  }
+  const wasPushed = state.threadPushed;
+  // 先立即关闭，避免 history.back() 慢或失效时页面卡住；历史稍后异步回退
   state.threadPushed = false;
   el.threadRoot.classList.remove('show');
   el.threadRoot.innerHTML = '';
+  if (!fromHistory && wasPushed) history.back();
 }
 
 /** 站内楼中楼：展示顶层评论 + 归档到的回复，不跳转外部。 */
@@ -1065,6 +1064,15 @@ function switchUser(uid) {
 async function onClick(event) {
   const target = event.target instanceof Element ? event.target : null;
   if (!target) return;
+
+  if (IS_STANDALONE) {
+    const external = target.closest('a[data-external]');
+    if (external && external.href) {
+      event.preventDefault();
+      window.location.replace(external.href);
+      return;
+    }
+  }
 
   if (target.closest('[data-thread-close]')) {
     closeThread();
