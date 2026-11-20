@@ -1179,9 +1179,17 @@ function tickClock() {
 function syncAppHeight() {
   const viewport = window.visualViewport;
   const inner = window.innerHeight || 0;
-  // 键盘弹出时 visualViewport 会大幅变小，此时保留整页高度，避免输入框把页面压扁
-  const keyboardOpen = viewport ? inner - viewport.height > 150 : false;
-  const height = Math.round(keyboardOpen ? inner : viewport ? viewport.height : inner);
+  let height = inner;
+  if (IS_STANDALONE && IS_IOS) {
+    // iOS 添加到主屏幕后 WebView 从微博返回时 innerHeight / visualViewport 会短暂报小，
+    // 独立窗口直接铺满物理屏幕，避免底部空白
+    height = window.screen.height || inner;
+  } else if (viewport) {
+    // 键盘弹出时 visualViewport 会大幅变小，此时保留整页高度，避免输入框把页面压扁
+    const keyboardOpen = inner - viewport.height > 150;
+    height = keyboardOpen ? inner : viewport.height;
+  }
+  height = Math.round(height);
   if (height > 0) document.documentElement.style.setProperty('--app-height', `${height}px`);
 }
 
