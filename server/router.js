@@ -745,14 +745,34 @@ async function hShowcaseImage(ctx) {
   if (target.protocol !== 'https:' || !(host === 'sinaimg.cn' || host.endsWith('.sinaimg.cn'))) {
     throw new AppError('BAD_REQUEST', '只允许代理微博图床', 400);
   }
-  const upstream = await fetch(target.href, {
-    headers: {
-      Referer: 'https://m.weibo.cn/',
-      'User-Agent':
-        'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1',
-    },
-  });
-  if (!upstream.ok) throw new AppError('NOT_FOUND', '微博图片读取失败', 404);
+  const candidates = [target.href];
+  if (target.pathname.includes('/orj360/')) {
+    const large = new URL(target.href);
+    large.pathname = large.pathname.replace('/orj360/', '/large/');
+    candidates.push(large.href);
+  }
+  for (const host of ['wx2.sinaimg.cn', 'wx3.sinaimg.cn', 'wx4.sinaimg.cn', 'ww1.sinaimg.cn', 'ww2.sinaimg.cn']) {
+    if (host !== target.hostname) {
+      const alternate = new URL(target.href);
+      alternate.hostname = host;
+      candidates.push(alternate.href);
+    }
+  }
+  let upstream = null;
+  for (const candidate of candidates) {
+    const response = await fetch(candidate, {
+      headers: {
+        Referer: 'https://m.weibo.cn/',
+        'User-Agent':
+          'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1',
+      },
+    });
+    if (response.ok) {
+      upstream = response;
+      break;
+    }
+  }
+  if (!upstream) throw new AppError('NOT_FOUND', '微博图片读取失败', 404);
   const body = Buffer.from(await upstream.arrayBuffer());
   ctx.res.writeHead(200, {
     'Content-Type': upstream.headers.get('content-type') || 'image/jpeg',
