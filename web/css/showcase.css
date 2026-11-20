@@ -1493,7 +1493,7 @@ body.is-fullscreen .statusbar {
   html,
   body,
   .phone {
-    height: max(100vh, var(--pwa-height, 100vh));
+    height: 100vh;
   }
 
   .phone {

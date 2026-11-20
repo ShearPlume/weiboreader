@@ -259,7 +259,10 @@ const IS_STANDALONE =
 function externalLinkAttrs(href) {
   const value = String(href || '');
   if (!value) return '';
-  return `href="${esc(value)}" target="${IS_MOBILE ? '_self' : '_blank'}" rel="noopener"`;
+  // 主屏幕应用不要用 _self：左下角返回会进入内嵌浏览器副本，视口被永久压小。
+  // 新窗口打开后没有展示页历史，只能点 X 关闭，回到的仍是完整 PWA。
+  const target = IS_STANDALONE ? '_blank' : IS_MOBILE ? '_self' : '_blank';
+  return `href="${esc(value)}" target="${target}" rel="noopener"`;
 }
 
 /** 用户主页（m.weibo.cn 在手机上可唤起微博 App）。 */
@@ -1028,7 +1031,6 @@ async function renderScreen(direction = '') {
     const markup = await SCREENS[state.route]();
     if (seq !== state.seq) return;
     setScreen(markup);
-    applyRestoreScroll();
     renderTabbar();
   } catch (err) {
     if (seq !== state.seq) return;
@@ -1188,28 +1190,8 @@ function tickClock() {
 /** iOS 独立窗口切走再回来后视口高度会变化，重新计算并锁定 --app-height。 */
 let appHeight = 0;
 let appTop = 0;
-let pwaHeightSet = 0;
-
-/** 独立窗口返回后 100vh 也可能偏矮，用物理屏高兜底；差值小时不启用，避免把底部栏顶出去。 */
-function syncPwaHeight() {
-  if (!IS_STANDALONE || !IS_IOS) return;
-  const screenHeight = window.screen.height || 0;
-  const inner = window.innerHeight || 0;
-  if (screenHeight <= 0) return;
-  const gap = screenHeight - inner;
-  if (gap > 80) {
-    if (pwaHeightSet !== screenHeight) {
-      pwaHeightSet = screenHeight;
-      document.documentElement.style.setProperty('--pwa-height', `${screenHeight}px`);
-    }
-  } else if (gap < 40 && pwaHeightSet) {
-    pwaHeightSet = 0;
-    document.documentElement.style.removeProperty('--pwa-height');
-  }
-}
 
 function syncAppHeight() {
-  syncPwaHeight();
   const viewport = window.visualViewport;
   const inner = window.innerHeight || 0;
   let height = inner;
@@ -1237,48 +1219,6 @@ function syncAppHeight() {
 function resyncViewport() {
   syncAppHeight();
   for (const delay of [60, 200, 500, 1000]) window.setTimeout(syncAppHeight, delay);
-}
-
-/** bfcache 返回时页面会沿用旧视口，保存滚动位置后轻量重载一次。 */
-function saveScrollAndReload() {
-  try {
-    sessionStorage.setItem(
-      'weibo-showcase-restore',
-      JSON.stringify({
-        scrollTop: el.screen ? el.screen.scrollTop : 0,
-        hash: location.hash,
-        ts: Date.now(),
-      })
-    );
-  } catch {
-    /* 隐私模式下忽略 */
-  }
-  window.location.reload();
-}
-
-let restoreScrollTop = null;
-
-/** 内容异步渲染完成后恢复之前的位置。 */
-function applyRestoreScroll() {
-  if (restoreScrollTop === null || !el.screen) return;
-  el.screen.scrollTop = restoreScrollTop;
-}
-
-/** 重载后把列表滚动位置还原，避免回到顶部。 */
-function restoreScrollAfterBoot() {
-  let saved = null;
-  try {
-    saved = JSON.parse(sessionStorage.getItem('weibo-showcase-restore') || 'null');
-    sessionStorage.removeItem('weibo-showcase-restore');
-  } catch {
-    saved = null;
-  }
-  if (!saved || Date.now() - Number(saved.ts || 0) > 15000) return;
-  restoreScrollTop = Number(saved.scrollTop) || 0;
-  for (const delay of [50, 200, 500, 1000]) window.setTimeout(applyRestoreScroll, delay);
-  window.setTimeout(() => {
-    restoreScrollTop = null;
-  }, 3000);
 }
 
 const INVITE_KEY = 'weibo-showcase-invite-v1';
@@ -1490,20 +1430,8 @@ async function boot() {
   syncAppHeight();
   window.addEventListener('resize', syncAppHeight);
   window.addEventListener('orientationchange', syncAppHeight);
-  // 从微博 App / 其他页面回来后重算视口；只有 bfcache 返回（左下角返回）才轻量重载
-  window.addEventListener('pageshow', (event) => {
-    resyncViewport();
-    if (!IS_STANDALONE || !IS_IOS) return;
-    let navType = '';
-    try {
-      navType = (performance.getEntriesByType('navigation')[0] || {}).type || '';
-    } catch {
-      navType = '';
-    }
-    if (event.persisted || navType === 'back_forward') {
-      window.setTimeout(saveScrollAndReload, 120);
-    }
-  });
+  // 从微博 App / 其他页面回来后只重算视口，不刷新页面
+  window.addEventListener('pageshow', resyncViewport);
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) resyncViewport();
   });
@@ -1555,7 +1483,6 @@ async function boot() {
   state.uid = known ? known.uid : newest ? newest.uid : null;
   state.route = currentRoute();
   render();
-  restoreScrollAfterBoot();
 }
 
 boot();
