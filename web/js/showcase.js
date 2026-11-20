@@ -1028,6 +1028,7 @@ async function renderScreen(direction = '') {
     const markup = await SCREENS[state.route]();
     if (seq !== state.seq) return;
     setScreen(markup);
+    applyRestoreScroll();
     renderTabbar();
   } catch (err) {
     if (seq !== state.seq) return;
@@ -1236,6 +1237,48 @@ function syncAppHeight() {
 function resyncViewport() {
   syncAppHeight();
   for (const delay of [60, 200, 500, 1000]) window.setTimeout(syncAppHeight, delay);
+}
+
+/** bfcache 返回时页面会沿用旧视口，保存滚动位置后轻量重载一次。 */
+function saveScrollAndReload() {
+  try {
+    sessionStorage.setItem(
+      'weibo-showcase-restore',
+      JSON.stringify({
+        scrollTop: el.screen ? el.screen.scrollTop : 0,
+        hash: location.hash,
+        ts: Date.now(),
+      })
+    );
+  } catch {
+    /* 隐私模式下忽略 */
+  }
+  window.location.reload();
+}
+
+let restoreScrollTop = null;
+
+/** 内容异步渲染完成后恢复之前的位置。 */
+function applyRestoreScroll() {
+  if (restoreScrollTop === null || !el.screen) return;
+  el.screen.scrollTop = restoreScrollTop;
+}
+
+/** 重载后把列表滚动位置还原，避免回到顶部。 */
+function restoreScrollAfterBoot() {
+  let saved = null;
+  try {
+    saved = JSON.parse(sessionStorage.getItem('weibo-showcase-restore') || 'null');
+    sessionStorage.removeItem('weibo-showcase-restore');
+  } catch {
+    saved = null;
+  }
+  if (!saved || Date.now() - Number(saved.ts || 0) > 15000) return;
+  restoreScrollTop = Number(saved.scrollTop) || 0;
+  for (const delay of [50, 200, 500, 1000]) window.setTimeout(applyRestoreScroll, delay);
+  window.setTimeout(() => {
+    restoreScrollTop = null;
+  }, 3000);
 }
 
 const INVITE_KEY = 'weibo-showcase-invite-v1';
@@ -1447,8 +1490,20 @@ async function boot() {
   syncAppHeight();
   window.addEventListener('resize', syncAppHeight);
   window.addEventListener('orientationchange', syncAppHeight);
-  // 从微博 App / 其他页面回来后只重算视口高度，不刷新页面、不把滚动位置拉回顶部
-  window.addEventListener('pageshow', resyncViewport);
+  // 从微博 App / 其他页面回来后重算视口；只有 bfcache 返回（左下角返回）才轻量重载
+  window.addEventListener('pageshow', (event) => {
+    resyncViewport();
+    if (!IS_STANDALONE || !IS_IOS) return;
+    let navType = '';
+    try {
+      navType = (performance.getEntriesByType('navigation')[0] || {}).type || '';
+    } catch {
+      navType = '';
+    }
+    if (event.persisted || navType === 'back_forward') {
+      window.setTimeout(saveScrollAndReload, 120);
+    }
+  });
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) resyncViewport();
   });
@@ -1500,6 +1555,7 @@ async function boot() {
   state.uid = known ? known.uid : newest ? newest.uid : null;
   state.route = currentRoute();
   render();
+  restoreScrollAfterBoot();
 }
 
 boot();
