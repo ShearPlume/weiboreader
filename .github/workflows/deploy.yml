@@ -56,7 +56,15 @@ jobs:
             pm2 start server/server.js --name weibo-showcase
           pm2 save >/dev/null
 
-          curl -fsS http://172.17.0.1:7788/api/health
+          ok=0
+          for i in $(seq 1 20); do
+            if curl -fsS http://172.17.0.1:7788/api/health; then
+              ok=1
+              break
+            fi
+            sleep 1
+          done
+          [ "$ok" = "1" ]
           REMOTE
 
       - name: Smoke test
