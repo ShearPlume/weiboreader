@@ -130,12 +130,18 @@ async function fetchProfile(uid, auth, referer) {
       }
       const info = (doc.data && doc.data.userInfo) || null;
       if (!info) return { ok: false, error: '响应中没有 userInfo' };
+      const avatarHd = String(info.avatar_hd || '');
+      // 默认头像的 avatar_hd 可能是没有扩展名的坏地址（如 default_avatar_female_180&690），
+      // 这种情况退回 profile_image_url，保证能下载到图片。
+      const avatarUrl = /\.(jpe?g|png|gif|webp)(\?|$)/i.test(avatarHd)
+        ? avatarHd
+        : String(info.profile_image_url || avatarHd);
       return {
         ok: true,
         profile: {
           uid,
           screenName: String(info.screen_name || ''),
-          avatarUrl: String(info.avatar_hd || info.profile_image_url || ''),
+          avatarUrl,
           description: String(info.description || ''),
           followers: Number(info.followers_count) || 0,
           friends: Number(info.follow_count) || 0,
