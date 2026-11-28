@@ -227,6 +227,11 @@ function createServer() {
  * 放在 Node 里而不是藏在 .bat 的延迟命令里：.bat 里用 `start`/`explorer` 拼超时容易
  * 因行尾或引号问题静默失败，而这里能拿到真实结果、失败也只是提示，不影响服务。
  */
+function openAppPages(url) {
+  openBrowser(url);
+  openBrowser(`${url}/showcase.html`);
+}
+
 function openBrowser(url) {
   if (process.env.NO_OPEN === '1') return;
   try {
@@ -272,8 +277,8 @@ async function main() {
       // 最常见的情形其实是「已经启动过、又双击了一次」——此时友好接管而不是报错
       if (await probeRunning(url)) {
         console.log(`\n  ${APP_NAME} 已经在运行：${url}`);
-        console.log('  已为你打开浏览器，无需重复启动。\n');
-        openBrowser(url);
+        console.log('  已为你打开后台和展示页，无需重复启动。\n');
+        openAppPages(url);
         process.exit(0);
       }
       console.error(`\n[提示] 另一个 ${APP_NAME} 实例正在使用同一数据目录（pid ${lock.holderPid}）。`);
@@ -302,7 +307,7 @@ async function main() {
     console.log('  ➜  按 Ctrl+C 停止（退出后订阅巡检与任务都会停止）');
     console.log('');
     scheduler.start();
-    openBrowser(url);
+    openAppPages(url);
   });
 
   const shutdown = (signal) => {
